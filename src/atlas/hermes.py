@@ -23,6 +23,10 @@ class Hermes(Entity):
         if binary := shutil.which("hermes"):
             return Path(binary)
 
+        local_launcher = Path.home() / ".local" / "bin" / "hermes"
+        if local_launcher.is_file():
+            return local_launcher
+
         launcher = self.home / "hermes-agent" / "venv" / "bin" / "hermes"
         return launcher if launcher.is_file() else None
 
@@ -57,16 +61,20 @@ class Hermes(Entity):
         """Give Hermes direct access to the host rather than a container backend."""
         await self.command("config", "set", "terminal.backend", "local")
 
-    async def doctor(self, *, strict: bool = False) -> ProcessResult:
-        """Run Hermes diagnostics; provider warnings are expected before inference exists."""
+    async def doctor(self, *, strict: bool = False, fix: bool = False) -> ProcessResult:
+        """Run Hermes diagnostics and optionally apply Hermes' automatic fixes."""
+        args = ["doctor"]
+        if fix:
+            args.append("--fix")
+
         try:
-            return await self.command("doctor")
+            return await self.command(*args)
         except ProcessError as error:
             if strict:
                 raise
             log.warning(
                 "Hermes doctor reports incomplete configuration; "
-                "this is expected before a model provider is configured."
+                "this can be expected until all providers and optional tools are configured."
             )
             return error.result
 
