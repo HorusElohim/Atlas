@@ -22,6 +22,7 @@ def inspect() -> None:
     payload = hardware.model_dump(mode="json")
     payload["capabilities"] = {
         "hermes": True,
+        "jetson": hardware.is_jetson,
         "qwen_27b": hardware.can_run_qwen_27b,
     }
     click.echo(json.dumps(payload, indent=2))
