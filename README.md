@@ -70,6 +70,38 @@ curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.
 
 For unattended machine keys, the bootstrap creates the Ed25519 key without a passphrase by default. Set `ATLAS_SSH_KEY_PASSPHRASE` before running if you explicitly want one.
 
+## Shell setup
+
+Interactive shell customization is opt-in:
+
+```bash
+atlas ohmyzsh setup
+```
+
+Atlas installs Zsh, Oh My Zsh, Powerlevel10k and the recommended MesloLGS NF font family, preserves the existing `.zshrc`, selects the Powerlevel10k theme, configures GNOME Terminal when available, and makes Zsh the login shell.
+
+Open a new terminal or run:
+
+```bash
+exec zsh
+```
+
+Then use `p10k configure` to choose the final prompt style.
+
+## Hermes
+
+Install and prepare Hermes natively on a node:
+
+```bash
+atlas hermes setup
+```
+
+Run diagnostics independently with:
+
+```bash
+atlas hermes doctor
+```
+
 ## Development
 
 Atlas requires Python 3.10+.
@@ -87,8 +119,9 @@ atlas inspect
 - [x] Atlas package and CLI foundation
 - [x] Local hardware inspection
 - [x] One-command Linux bootstrap
+- [x] Hermes native installer and configuration
+- [x] Optional Oh My Zsh + Powerlevel10k environment
 - [ ] SSH node transport
-- [ ] Hermes native installer and configuration
 - [ ] CUDA-enabled llama.cpp deployment
 - [ ] Qwen3.8-27B model management
 - [ ] systemd services
