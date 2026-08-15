@@ -8,6 +8,7 @@ import json
 import rich_click as click
 
 from .hardware import Hardware
+from .hermes import Hermes
 
 
 @click.group()
@@ -26,3 +27,21 @@ def inspect() -> None:
         "qwen_27b": hardware.can_run_qwen_27b,
     }
     click.echo(json.dumps(payload, indent=2))
+
+
+@main.group(name="hermes")
+def hermes_cli() -> None:
+    """Manage the Hermes Agent installation on this node."""
+
+
+@hermes_cli.command(name="setup")
+def hermes_setup() -> None:
+    """Install Hermes natively, select the local terminal backend, and run diagnostics."""
+    asyncio.run(Hermes(name="Hermes").setup())
+
+
+@hermes_cli.command(name="doctor")
+@click.option("--strict", is_flag=True, help="Fail when Hermes reports an incomplete configuration.")
+def hermes_doctor(strict: bool) -> None:
+    """Run Hermes diagnostics."""
+    asyncio.run(Hermes(name="Hermes").doctor(strict=strict))
