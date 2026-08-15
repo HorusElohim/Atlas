@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from bundle.core import Data
+from pydantic import Field
 
 from .hardware import Hardware
 
@@ -22,7 +23,7 @@ class Node(Data):
 
     name: str
     host: str = "localhost"
-    roles: set[NodeRole] = {NodeRole.AGENT}
+    roles: set[NodeRole] = Field(default_factory=lambda: {NodeRole.AGENT})
     hardware: Hardware | None = None
 
     @property
