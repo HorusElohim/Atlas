@@ -106,12 +106,20 @@ class OhMyZsh(Entity):
         content = self.zshrc.read_text(encoding="utf-8") if self.zshrc.exists() else ""
         theme = 'ZSH_THEME="powerlevel10k/powerlevel10k"'
         p10k_source = '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh'
+        local_bin_path = 'export PATH="$HOME/.local/bin:$PATH"'
 
         lines = [
             line
             for line in content.splitlines()
             if not re.match(r"^\s*ZSH_THEME=", line) and line.strip() != p10k_source
         ]
+
+        has_local_bin = any(
+            "PATH=" in line and ("$HOME/.local/bin" in line or "${HOME}/.local/bin" in line or "~/.local/bin" in line)
+            for line in lines
+        )
+        if not has_local_bin:
+            lines.insert(0, local_bin_path)
 
         source_index = next(
             (
