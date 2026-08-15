@@ -52,7 +52,8 @@ $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
     python3-dev \
     python3-pip \
     python3-venv \
-    wget
+    wget \
+    xz-utils
 
 log "Installing GitHub CLI from the official repository"
 $SUDO install -d -m 0755 /etc/apt/keyrings
