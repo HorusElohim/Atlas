@@ -25,6 +25,15 @@ class Hardware(Data):
     gpu: Gpu | None = None
 
     @property
+    def is_jetson(self) -> bool:
+        """Whether this machine looks like an NVIDIA Jetson platform."""
+        model = (self.device_model or "").lower()
+        gpu_name = (self.gpu.name if self.gpu else "").lower()
+        return "jetson" in model or (
+            self.platform.arch == "aarch64" and "(nvgpu)" in gpu_name
+        )
+
+    @property
     def can_run_qwen_27b(self) -> bool:
         """Conservative eligibility for a ~17 GiB Q4 27B model on one GPU."""
         return self.gpu is not None and self.gpu.memory_mib is not None and self.gpu.memory_mib >= 22_000
