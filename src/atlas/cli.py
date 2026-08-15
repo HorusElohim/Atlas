@@ -42,18 +42,19 @@ def hermes_setup() -> None:
 
 
 @hermes_cli.command(name="doctor")
+@click.option("--fix", is_flag=True, help="Apply Hermes automatic configuration and state fixes.")
 @click.option("--strict", is_flag=True, help="Fail when Hermes reports an incomplete configuration.")
-def hermes_doctor(strict: bool) -> None:
+def hermes_doctor(fix: bool, strict: bool) -> None:
     """Run Hermes diagnostics."""
-    asyncio.run(Hermes(name="Hermes").doctor(strict=strict))
+    asyncio.run(Hermes(name="Hermes").doctor(strict=strict, fix=fix))
 
 
 @main.group(name="ohmyzsh")
 def ohmyzsh_cli() -> None:
-    """Manage the interactive Zsh environment on this node."""
+    """Manage the interactive shell and terminal environment on this node."""
 
 
 @ohmyzsh_cli.command(name="setup")
 def ohmyzsh_setup() -> None:
-    """Install Oh My Zsh, Powerlevel10k, MesloLGS NF and make Zsh the login shell."""
+    """Install Oh My Zsh, Powerlevel10k, MesloLGS NF, Terminator and Zsh defaults."""
     asyncio.run(OhMyZsh(name="OhMyZsh").setup())
