@@ -171,7 +171,9 @@ class OhMyZsh(Entity):
         )
         command = (
             f"gsettings set {shlex.quote(schema)} use-system-font false && "
-            f"gsettings set {shlex.quote(schema)} font {shlex.quote('MesloLGS NF 11')}"
+            f"gsettings set {shlex.quote(schema)} font {shlex.quote('MesloLGS NF Regular 11')} && "
+            f"gsettings set {shlex.quote(schema)} cell-width-scale 1.0 && "
+            f"gsettings set {shlex.quote(schema)} cell-height-scale 1.0"
         )
 
         try:
