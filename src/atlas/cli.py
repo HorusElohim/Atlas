@@ -36,9 +36,16 @@ def hermes_cli() -> None:
 
 
 @hermes_cli.command(name="setup")
-def hermes_setup() -> None:
-    """Install Hermes natively, select the local terminal backend, and run diagnostics."""
-    asyncio.run(Hermes(name="Hermes").setup())
+@click.option("--quick", is_flag=True, help="Only prompt for missing or unset Hermes settings.")
+def hermes_setup(quick: bool) -> None:
+    """Install Hermes, run its setup wizard, enforce native execution, and verify it."""
+    asyncio.run(Hermes(name="Hermes").setup(quick=quick))
+
+
+@hermes_cli.command(name="expose")
+def hermes_expose() -> None:
+    """Expose the Hermes launcher at /usr/local/bin/hermes."""
+    asyncio.run(Hermes(name="Hermes").expose())
 
 
 @hermes_cli.command(name="doctor")
