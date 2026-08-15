@@ -31,6 +31,45 @@ It keeps **agent execution** and **model inference** separate:
 4. **Minimal orchestration** — Atlas uses Python and [TheBundle](https://github.com/HorusElohim/TheBundle) instead of growing a second configuration language.
 5. **Secure by default** — agent APIs are private to the Atlas network and never intentionally exposed to the public internet.
 
+## Bootstrap a Linux node
+
+A fresh Ubuntu or Jetson Linux machine can join Atlas with one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
+
+or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
+
+The bootstrap is idempotent and performs the machine-level setup that must happen before Atlas can manage itself:
+
+1. Updates apt and installs the base build, Git, SSH and Python prerequisites.
+2. Installs the official GitHub CLI package.
+3. Creates a dedicated Ed25519 key at `~/.ssh/id_ed25519_atlas` when missing.
+4. Authenticates GitHub interactively when required and registers the public key with the account.
+5. Adds a dedicated `github-atlas` SSH host alias without replacing the machine's normal GitHub SSH configuration.
+6. Clones or updates Atlas in `~/Atlas`.
+7. Switches the repository remote to the dedicated SSH identity.
+8. Creates `~/Atlas/.venv`.
+9. Installs Atlas editable into the virtual environment.
+10. Runs `atlas inspect`.
+
+The first GitHub authentication may open a browser/device flow. Re-running the bootstrap reuses the existing key, GitHub authorization, checkout and virtual environment.
+
+Optional environment overrides:
+
+```bash
+ATLAS_DIR="$HOME/dev/Atlas" \
+ATLAS_SSH_KEY="$HOME/.ssh/my_atlas_key" \
+curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
+
+For unattended machine keys, the bootstrap creates the Ed25519 key without a passphrase by default. Set `ATLAS_SSH_KEY_PASSPHRASE` before running if you explicitly want one.
+
 ## Development
 
 Atlas requires Python 3.10+.
@@ -47,6 +86,7 @@ atlas inspect
 
 - [x] Atlas package and CLI foundation
 - [x] Local hardware inspection
+- [x] One-command Linux bootstrap
 - [ ] SSH node transport
 - [ ] Hermes native installer and configuration
 - [ ] CUDA-enabled llama.cpp deployment
