@@ -50,3 +50,38 @@ def test_configure_zshrc_keeps_existing_local_bin_path(tmp_path: Path) -> None:
 
     content = zshrc.read_text(encoding="utf-8")
     assert content.count("$HOME/.local/bin") == 1
+
+
+def test_configure_terminator_creates_default_meslo_profile(tmp_path: Path) -> None:
+    setup = OhMyZsh(name="TestOhMyZsh", home=tmp_path)
+    setup.configure_terminator()
+
+    content = setup.terminator_config.read_text(encoding="utf-8")
+    assert "[profiles]" in content
+    assert "[[default]]" in content
+    assert "use_system_font = False" in content
+    assert "font = MesloLGS NF Regular 11" in content
+
+
+def test_configure_terminator_preserves_other_profile_options(tmp_path: Path) -> None:
+    config = tmp_path / ".config" / "terminator" / "config"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        "[global_config]\n"
+        "[profiles]\n"
+        "  [[default]]\n"
+        "    background_color = #101010\n"
+        "    use_system_font = True\n"
+        "    font = Monospace 10\n"
+        "[plugins]\n",
+        encoding="utf-8",
+    )
+
+    setup = OhMyZsh(name="TestOhMyZsh", home=tmp_path)
+    setup.configure_terminator()
+    setup.configure_terminator()
+
+    content = config.read_text(encoding="utf-8")
+    assert "background_color = #101010" in content
+    assert content.count("use_system_font = False") == 1
+    assert content.count("font = MesloLGS NF Regular 11") == 1
