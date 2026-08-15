@@ -1,10 +1,11 @@
-"""Oh My Zsh and Powerlevel10k host setup managed by Atlas."""
+"""Oh My Zsh, Powerlevel10k and terminal setup managed by Atlas."""
 
 from __future__ import annotations
 
 import os
 import re
 import shlex
+import shutil
 from pathlib import Path
 
 from bundle.core import Entity, Process, ProcessError, ProcessStream, data, logger
@@ -13,7 +14,7 @@ log = logger.get_logger(__name__)
 
 
 class OhMyZsh(Entity):
-    """Idempotent Oh My Zsh, Powerlevel10k and MesloLGS NF setup."""
+    """Idempotent Oh My Zsh, Powerlevel10k, MesloLGS NF and Terminator setup."""
 
     home: Path = data.Field(default_factory=Path.home)
     oh_my_zsh_url: str = "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
@@ -37,12 +38,16 @@ class OhMyZsh(Entity):
     def font_dir(self) -> Path:
         return self.home / ".local" / "share" / "fonts" / "MesloLGS-NF"
 
+    @property
+    def terminator_config(self) -> Path:
+        return self.home / ".config" / "terminator" / "config"
+
     async def install_packages(self) -> None:
-        """Install the Linux packages required by the shell environment."""
+        """Install the Linux packages required by the interactive environment."""
         await ProcessStream(name="Atlas.OhMyZsh.Apt")(
             "sudo apt-get update && "
             "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-            "zsh fontconfig curl git"
+            "zsh fontconfig curl git terminator"
         )
 
     async def install_oh_my_zsh(self) -> None:
@@ -157,8 +162,133 @@ class OhMyZsh(Entity):
 
         self.zshrc.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
+    def configure_terminator(self) -> None:
+        """Configure Terminator's default profile with the Powerlevel10k font."""
+        self.terminator_config.parent.mkdir(parents=True, exist_ok=True)
+        content = self.terminator_config.read_text(encoding="utf-8") if self.terminator_config.exists() else ""
+        lines = content.splitlines()
+
+        if not lines:
+            lines = [
+                "[global_config]",
+                "[keybindings]",
+                "[profiles]",
+                "  [[default]]",
+                "    use_system_font = False",
+                "    font = MesloLGS NF Regular 11",
+                "[layouts]",
+                "  [[default]]",
+                "    [[[window0]]]",
+                '      type = Window',
+                '      parent = ""',
+                "    [[[child1]]]",
+                "      type = Terminal",
+                "      parent = window0",
+                "[plugins]",
+            ]
+        else:
+            lines = self._patch_terminator_default_profile(lines)
+
+        self.terminator_config.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    @staticmethod
+    def _patch_terminator_default_profile(lines: list[str]) -> list[str]:
+        """Patch only the default Terminator profile while preserving the rest of the config."""
+        output: list[str] = []
+        in_profiles = False
+        in_default = False
+        profiles_seen = False
+        default_seen = False
+        font_seen = False
+        system_font_seen = False
+
+        def finish_default() -> None:
+            nonlocal font_seen, system_font_seen
+            if not in_default:
+                return
+            if not system_font_seen:
+                output.append("    use_system_font = False")
+            if not font_seen:
+                output.append("    font = MesloLGS NF Regular 11")
+            font_seen = False
+            system_font_seen = False
+
+        for line in lines:
+            stripped = line.strip()
+            top_level = bool(re.fullmatch(r"\[[^\[\]]+\]", stripped))
+            subsection = bool(re.fullmatch(r"\[\[[^\[\]]+\]\]", stripped))
+
+            if top_level:
+                if in_default:
+                    finish_default()
+                    in_default = False
+                if in_profiles and not default_seen:
+                    output.extend([
+                        "  [[default]]",
+                        "    use_system_font = False",
+                        "    font = MesloLGS NF Regular 11",
+                    ])
+                    default_seen = True
+                in_profiles = stripped == "[profiles]"
+                profiles_seen = profiles_seen or in_profiles
+                output.append(line)
+                continue
+
+            if in_profiles and subsection:
+                if in_default:
+                    finish_default()
+                in_default = stripped == "[[default]]"
+                if in_default:
+                    default_seen = True
+                    font_seen = False
+                    system_font_seen = False
+                output.append(line)
+                continue
+
+            if in_default and re.match(r"^\s*use_system_font\s*=", line):
+                output.append("    use_system_font = False")
+                system_font_seen = True
+                continue
+
+            if in_default and re.match(r"^\s*font\s*=", line):
+                output.append("    font = MesloLGS NF Regular 11")
+                font_seen = True
+                continue
+
+            output.append(line)
+
+        if in_default:
+            finish_default()
+        if in_profiles and not default_seen:
+            output.extend([
+                "  [[default]]",
+                "    use_system_font = False",
+                "    font = MesloLGS NF Regular 11",
+            ])
+        if not profiles_seen:
+            if output and output[-1].strip():
+                output.append("")
+            output.extend([
+                "[profiles]",
+                "  [[default]]",
+                "    use_system_font = False",
+                "    font = MesloLGS NF Regular 11",
+            ])
+
+        return output
+
+    async def configure_default_terminal(self) -> None:
+        """Make Terminator the system x-terminal-emulator alternative."""
+        terminator = shutil.which("terminator")
+        if not terminator:
+            raise RuntimeError("Terminator was not found after package installation.")
+
+        await ProcessStream(name="Atlas.Terminator.Default")(
+            f"sudo update-alternatives --set x-terminal-emulator {shlex.quote(terminator)}"
+        )
+
     async def configure_gnome_terminal(self) -> None:
-        """Use MesloLGS NF in GNOME Terminal when running inside a desktop session."""
+        """Keep GNOME Terminal usable with MesloLGS NF as a fallback terminal."""
         if not os.environ.get("DISPLAY"):
             return
 
@@ -213,14 +343,16 @@ class OhMyZsh(Entity):
         )
 
     async def setup(self) -> None:
-        """Configure a polished, reproducible interactive shell for an Atlas node."""
+        """Configure a polished, reproducible interactive environment for an Atlas node."""
         await self.install_packages()
         await self.install_oh_my_zsh()
         await self.install_powerlevel10k()
         await self.install_fonts()
         self.configure_zshrc()
+        self.configure_terminator()
+        await self.configure_default_terminal()
         await self.configure_gnome_terminal()
         await self.configure_login_shell()
 
-        log.info("Oh My Zsh + Powerlevel10k setup complete.")
-        log.info("Open a new terminal or run `exec zsh`, then run `p10k configure` to choose the prompt style.")
+        log.info("Oh My Zsh + Powerlevel10k + Terminator setup complete.")
+        log.info("Open Terminator or run `exec zsh`, then run `p10k configure` to choose the prompt style.")
