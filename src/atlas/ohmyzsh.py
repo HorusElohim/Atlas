@@ -30,7 +30,8 @@ class OhMyZsh(Entity):
 
     @property
     def powerlevel10k(self) -> Path:
-        return self.oh_my_zsh / "custom" / "themes" / "powerlevel10k"
+        custom = Path(os.environ.get("ZSH_CUSTOM", self.oh_my_zsh / "custom"))
+        return custom / "themes" / "powerlevel10k"
 
     @property
     def font_dir(self) -> Path:
@@ -101,21 +102,52 @@ class OhMyZsh(Entity):
         await ProcessStream(name="Atlas.Font.Cache")("fc-cache -f")
 
     def configure_zshrc(self) -> None:
-        """Select Powerlevel10k while preserving the user's existing Zsh configuration."""
+        """Wire Oh My Zsh and Powerlevel10k while preserving user configuration."""
         content = self.zshrc.read_text(encoding="utf-8") if self.zshrc.exists() else ""
-
         theme = 'ZSH_THEME="powerlevel10k/powerlevel10k"'
-        theme_pattern = re.compile(r"^\s*ZSH_THEME=.*$", re.MULTILINE)
-        if theme_pattern.search(content):
-            content = theme_pattern.sub(theme, content, count=1)
-        else:
-            content = f"{content.rstrip()}\n\n{theme}\n" if content.strip() else f"{theme}\n"
-
         p10k_source = '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh'
-        if p10k_source not in content:
-            content = f"{content.rstrip()}\n\n{p10k_source}\n"
 
-        self.zshrc.write_text(content, encoding="utf-8")
+        lines = [
+            line
+            for line in content.splitlines()
+            if not re.match(r"^\s*ZSH_THEME=", line) and line.strip() != p10k_source
+        ]
+
+        source_index = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if "oh-my-zsh.sh" in line and not line.lstrip().startswith("#")
+            ),
+            None,
+        )
+
+        has_zsh_before_source = any(
+            re.match(r"^\s*(?:export\s+)?ZSH=", line)
+            for line in lines[:source_index] if source_index is not None
+        )
+        has_zsh = any(re.match(r"^\s*(?:export\s+)?ZSH=", line) for line in lines)
+
+        if source_index is not None:
+            if not has_zsh_before_source:
+                lines.insert(source_index, 'export ZSH="$HOME/.oh-my-zsh"')
+                source_index += 1
+            lines.insert(source_index, theme)
+        else:
+            if lines and lines[-1].strip():
+                lines.append("")
+            if not has_zsh:
+                lines.append('export ZSH="$HOME/.oh-my-zsh"')
+            lines.append(theme)
+            if not any(re.match(r"^\s*plugins=", line) for line in lines):
+                lines.append("plugins=(git)")
+            lines.append("source $ZSH/oh-my-zsh.sh")
+
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(p10k_source)
+
+        self.zshrc.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     async def configure_gnome_terminal(self) -> None:
         """Use MesloLGS NF in GNOME Terminal when running inside a desktop session."""
