@@ -9,6 +9,7 @@ import rich_click as click
 
 from .hardware import Hardware
 from .hermes import Hermes
+from .ohmyzsh import OhMyZsh
 
 
 @click.group()
@@ -45,3 +46,14 @@ def hermes_setup() -> None:
 def hermes_doctor(strict: bool) -> None:
     """Run Hermes diagnostics."""
     asyncio.run(Hermes(name="Hermes").doctor(strict=strict))
+
+
+@main.group(name="ohmyzsh")
+def ohmyzsh_cli() -> None:
+    """Manage the interactive Zsh environment on this node."""
+
+
+@ohmyzsh_cli.command(name="setup")
+def ohmyzsh_setup() -> None:
+    """Install Oh My Zsh, Powerlevel10k, MesloLGS NF and make Zsh the login shell."""
+    asyncio.run(OhMyZsh(name="OhMyZsh").setup())
