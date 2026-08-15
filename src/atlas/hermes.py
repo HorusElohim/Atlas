@@ -28,6 +28,7 @@ class Hermes(Entity):
 
     @property
     def installed(self) -> bool:
+        """Whether Hermes is already installed on this node."""
         return self.executable is not None
 
     async def install(self) -> None:
@@ -50,7 +51,7 @@ class Hermes(Entity):
             raise RuntimeError("Hermes is not installed. Run `atlas hermes setup` first.")
 
         command = " ".join([shlex.quote(str(executable)), *(shlex.quote(arg) for arg in args)])
-        return await ProcessStream(name="Atlas.Hermes") (command)
+        return await ProcessStream(name="Atlas.Hermes")(command)
 
     async def configure_native(self) -> None:
         """Give Hermes direct access to the host rather than a container backend."""
@@ -63,7 +64,10 @@ class Hermes(Entity):
         except ProcessError as error:
             if strict:
                 raise
-            log.warning("Hermes doctor reports incomplete configuration; this is expected before a model provider is configured.")
+            log.warning(
+                "Hermes doctor reports incomplete configuration; "
+                "this is expected before a model provider is configured."
+            )
             return error.result
 
     async def setup(self) -> ProcessResult:
