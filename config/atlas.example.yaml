@@ -1,0 +1,17 @@
+fleet:
+  name: atlas
+
+nodes:
+  atlas-gpu-01:
+    host: 192.168.1.20
+    roles: [agent, inference]
+
+  atlas-edge-01:
+    host: 192.168.1.21
+    roles: [agent, edge]
+    inference: atlas-gpu-01
+
+models:
+  qwen3_8_27b:
+    quantization: Q4_K_M
+    context: 32768
