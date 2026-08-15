@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import platform
 import re
 from pathlib import Path
 
-from bundle.core import Data, Process
+from bundle.core import Data, Platform, Process, platform_info
 
 
 class Gpu(Data):
@@ -19,9 +18,7 @@ class Gpu(Data):
 class Hardware(Data):
     """Hardware facts relevant to Atlas deployment decisions."""
 
-    architecture: str
-    system: str
-    machine: str
+    platform: Platform
     memory_mib: int | None = None
     gpu: Gpu | None = None
 
@@ -32,11 +29,9 @@ class Hardware(Data):
 
     @classmethod
     async def inspect(cls) -> "Hardware":
-        """Inspect the local machine without requiring NVIDIA tooling."""
+        """Inspect the local machine using Bundle as the platform source of truth."""
         return cls(
-            architecture=platform.machine(),
-            system=platform.system(),
-            machine=platform.node(),
+            platform=platform_info,
             memory_mib=_memory_mib(),
             gpu=await _nvidia_gpu(),
         )
@@ -55,15 +50,15 @@ def _memory_mib() -> int | None:
 async def _nvidia_gpu() -> Gpu | None:
     """Return the first discrete NVIDIA GPU reported by nvidia-smi."""
     try:
-        result = await Process()(
+        result = await Process(name="Atlas.NvidiaGpu")(
             "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits"
         )
     except Exception:
         return None
 
-    first = result.stdout.strip().splitlines()
-    if not first:
+    lines = result.stdout.strip().splitlines()
+    if not lines:
         return None
 
-    name, memory = (part.strip() for part in first[0].rsplit(",", 1))
+    name, memory = (part.strip() for part in lines[0].rsplit(",", 1))
     return Gpu(name=name, memory_mib=int(memory))
