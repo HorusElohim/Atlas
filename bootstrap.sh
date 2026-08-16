@@ -50,6 +50,55 @@ enable_component() {
     esac
 }
 
+toggle_component() {
+    case "$1" in
+        1)
+            if $INSTALL_HERMES; then
+                INSTALL_HERMES=false
+            else
+                INSTALL_HERMES=true
+            fi
+            ;;
+        2)
+            if $INSTALL_SHELL; then
+                INSTALL_SHELL=false
+            else
+                INSTALL_SHELL=true
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+checkbox() {
+    if "$1"; then
+        printf '[x]'
+    else
+        printf '[ ]'
+    fi
+}
+
+show_component_menu() {
+    cat > /dev/tty <<'EOF_MENU'
+
+Atlas bootstrap
+───────────────
+[x] Atlas core  (required)
+EOF_MENU
+
+    printf '%s 1. Hermes Agent\n' "$(checkbox "$INSTALL_HERMES")" > /dev/tty
+    printf '%s 2. Shell environment\n' "$(checkbox "$INSTALL_SHELL")" > /dev/tty
+    printf '      Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator\n' > /dev/tty
+
+    cat > /dev/tty <<'EOF_MENU'
+
+Toggle an item by number. Press Enter to install the selected components.
+> 
+EOF_MENU
+}
+
 select_components() {
     if [[ -n "${ATLAS_COMPONENTS:-}" ]]; then
         local normalized="${ATLAS_COMPONENTS//,/ }"
@@ -65,29 +114,32 @@ select_components() {
         return
     fi
 
-    cat > /dev/tty <<'EOF_MENU'
+    # Interactive bootstrap defaults to the complete Atlas node experience.
+    INSTALL_HERMES=true
+    INSTALL_SHELL=true
 
-Atlas bootstrap
-───────────────
-Atlas core is always installed (system prerequisites, GitHub SSH, checkout, venv and inspect).
+    while true; do
+        show_component_menu
 
-Optional components:
-  1. Hermes Agent
-  2. Shell environment (Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator)
-  a. Everything
+        local selection=""
+        IFS= read -r selection < /dev/tty || true
+        selection="${selection//,/ }"
 
-Select optional components, comma-separated [Atlas core only]:
-> 
-EOF_MENU
+        [[ -z "$selection" ]] && return
 
-    local selection=""
-    IFS= read -r selection < /dev/tty || true
-    [[ -z "$selection" ]] && return
+        local component
+        local valid=true
+        for component in $selection; do
+            if ! toggle_component "$component"; then
+                printf '\nUnknown selection: %s (use 1 or 2)\n' "$component" > /dev/tty
+                valid=false
+            fi
+        done
 
-    selection="${selection//,/ }"
-    local component
-    for component in $selection; do
-        enable_component "$component"
+        if ! $valid; then
+            printf 'Press Enter to continue...' > /dev/tty
+            IFS= read -r _ < /dev/tty || true
+        fi
     done
 }
 
