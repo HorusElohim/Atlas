@@ -52,18 +52,20 @@ def test_completion_extracts_content_and_reasoning(monkeypatch) -> None:
     validation = Validation(name="TestValidation")
 
     monkeypatch.setattr(
-        validation,
+        Validation,
         "_request_json",
-        lambda *args, **kwargs: {
-            "choices": [
-                {
-                    "message": {
-                        "content": "ATLAS_QWEN_OK",
-                        "reasoning_content": "checked",
+        staticmethod(
+            lambda *args, **kwargs: {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "ATLAS_QWEN_OK",
+                            "reasoning_content": "checked",
+                        }
                     }
-                }
-            ]
-        },
+                ]
+            }
+        ),
     )
 
     reply = validation._completion(
