@@ -24,8 +24,11 @@ def test_service_content_uses_authenticated_qwen_profile(tmp_path: Path, monkeyp
 
     assert "User=atlas" in content
     assert "--hf-repo example/Qwen3.8-27B-GGUF:Q4_K_M" in content
+    assert "--alias Qwen3.8-27B" in content
     assert "--ctx-size 65536" in content
+    assert "--parallel 1" in content
     assert "--n-gpu-layers all" in content
+    assert "--split-mode none" in content
     assert "--flash-attn on" in content
     assert "--cache-type-k q4_0" in content
     assert "--cache-type-v q4_0" in content
