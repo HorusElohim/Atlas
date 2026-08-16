@@ -12,6 +12,7 @@ from .hardware import Hardware
 from .hermes import Hermes
 from .inference import Inference
 from .ohmyzsh import OhMyZsh
+from .validation import Validation
 
 
 @click.group()
@@ -93,6 +94,38 @@ def hermes_connect(
     )
 
 
+@hermes_cli.command(name="connect-local")
+@click.option("--port", default=8_080, show_default=True, type=int, help="Local Atlas inference port.")
+@click.option("--model", default="Qwen3.8-27B", show_default=True, help="Local model alias.")
+@click.option("--context", default=65_536, show_default=True, type=int, help="Configured model context window.")
+def hermes_connect_local(port: int, model: str, context: int) -> None:
+    """Point Hermes at the Atlas inference service running on this same machine."""
+    inference = Inference(name="Inference")
+    if not inference.api_key_file.is_file():
+        raise click.ClickException(
+            "Atlas inference API key does not exist yet. Run `atlas inference qwen setup` first."
+        )
+
+    api_key = inference.api_key_file.read_text(encoding="utf-8").strip()
+    if not api_key:
+        raise click.ClickException(f"Atlas inference API key is empty: {inference.api_key_file}")
+
+    asyncio.run(
+        Hermes(name="Hermes").connect(
+            f"http://127.0.0.1:{port}/v1",
+            api_key,
+            model=model,
+            context=context,
+        )
+    )
+
+
+@hermes_cli.command(name="validate")
+def hermes_validate() -> None:
+    """Validate Hermes configuration, endpoint reachability and a real one-shot model response."""
+    asyncio.run(Validation(name="Validation").hermes(Hermes(name="Hermes")))
+
+
 @hermes_cli.command(name="doctor")
 @click.option("--fix", is_flag=True, help="Apply Hermes automatic configuration and state fixes.")
 @click.option("--strict", is_flag=True, help="Fail when Hermes reports an incomplete configuration.")
@@ -163,6 +196,22 @@ def inference_key() -> None:
 def inference_status() -> None:
     """Show the current Atlas inference systemd service status."""
     asyncio.run(Inference(name="Inference").status())
+
+
+@inference_cli.command(name="validate")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Reachable inference address to test.")
+@click.option("--port", default=8_080, show_default=True, type=int, help="Inference port to test.")
+@click.option("--model", default="Qwen3.8-27B", show_default=True, help="Expected model alias.")
+def inference_validate(host: str, port: int, model: str) -> None:
+    """Validate the service, HTTP API, advertised model and a real Qwen completion."""
+    asyncio.run(
+        Validation(name="Validation").inference(
+            Inference(name="Inference"),
+            host=host,
+            port=port,
+            model=model,
+        )
+    )
 
 
 @main.group(name="ohmyzsh")
