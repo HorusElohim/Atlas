@@ -45,23 +45,21 @@ or with `wget`:
 wget -qO- https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
-At startup the bootstrap presents a small component menu:
+At startup the interactive bootstrap shows a checkbox-style component menu. All optional components are selected by default:
 
 ```text
 Atlas bootstrap
 ───────────────
-Atlas core is always installed.
+[x] Atlas core  (required)
+[x] 1. Hermes Agent
+[x] 2. Shell environment
+      Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator
 
-Optional components:
-  1. Hermes Agent
-  2. Shell environment (Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator)
-  a. Everything
-
-Select optional components, comma-separated [Atlas core only]:
+Toggle an item by number. Press Enter to install the selected components.
 >
 ```
 
-Press Enter for Atlas core only, use `1` or `2` for one optional component, `1,2` for both, or `a` for everything.
+Enter `1` or `2` to toggle that component on or off. You can also enter multiple numbers such as `1,2`. The menu is shown again with the updated checkboxes after each toggle. Press Enter with no input to confirm and continue. Atlas core is always installed.
 
 The bootstrap is idempotent and the Atlas core performs the machine-level setup that must happen before Atlas can manage itself:
 
