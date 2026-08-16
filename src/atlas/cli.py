@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 from pathlib import Path
 
 import rich_click as click
+from bundle.core import Process, ProcessError, ProcessStream
 
 from .hardware import Hardware
 from .hermes import Hermes
@@ -21,6 +23,54 @@ def _run_cli(coroutine) -> None:
         asyncio.run(coroutine)
     except (RuntimeError, ValueError) as error:
         raise click.ClickException(str(error)) from error
+
+
+async def _apply_inference_networking(
+    inference: Inference,
+    *,
+    host: str,
+    port: int,
+    public_access: bool = False,
+) -> None:
+    """Restart inference after unit changes and optionally expose its port through UFW."""
+    try:
+        await ProcessStream(name="Atlas.Inference.Systemd.Restart")(
+            f"sudo systemctl restart {shlex.quote(inference.service_name)}"
+        )
+    except ProcessError as error:
+        raise RuntimeError(
+            "Atlas wrote the inference service configuration but could not restart it. "
+            "Run `atlas inference status` for details."
+        ) from error
+
+    await inference.wait_ready(host=host, port=port)
+
+    if not public_access:
+        return
+
+    try:
+        await Process(name="Atlas.Inference.Ufw.Detect")("command -v ufw")
+    except ProcessError:
+        click.echo("✓ UFW is not installed; no host firewall rule is required")
+        return
+
+    try:
+        status = await Process(name="Atlas.Inference.Ufw.Status")("sudo ufw status")
+    except ProcessError as error:
+        raise RuntimeError("UFW is installed but Atlas could not read its status.") from error
+
+    if "Status: active" not in status.stdout:
+        click.echo("✓ UFW is installed but inactive; no firewall rule is required")
+        return
+
+    try:
+        await ProcessStream(name="Atlas.Inference.Ufw.Allow")(
+            f"sudo ufw allow {port}/tcp"
+        )
+    except ProcessError as error:
+        raise RuntimeError(f"Could not allow public TCP port {port} through UFW.") from error
+
+    click.echo(f"✓ UFW allows TCP {port} from any source")
 
 
 @click.group()
@@ -201,20 +251,47 @@ def inference_qwen_cli() -> None:
 @inference_qwen_cli.command(name="setup")
 @click.option("--quant", default="Q4_K_M", show_default=True, help="GGUF quantization to build.")
 @click.option("--context", default=65_536, show_default=True, type=int, help="Server context size in tokens.")
-@click.option("--host", default="127.0.0.1", show_default=True, help="Inference listen address.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Inference listen address when --public is not used.")
 @click.option("--port", default=8_080, show_default=True, type=int, help="Inference listen port.")
+@click.option("--public", "public_access", is_flag=True, help="Listen on all IPv4 interfaces and allow this TCP port from any source through active UFW.")
 @click.option("--keep-bf16", is_flag=True, help="Keep the large intermediate BF16 GGUF after quantization.")
-def inference_qwen_setup(quant: str, context: int, host: str, port: int, keep_bf16: bool) -> None:
+def inference_qwen_setup(
+    quant: str,
+    context: int,
+    host: str,
+    port: int,
+    public_access: bool,
+    keep_bf16: bool,
+) -> None:
     """Convert, quantize and serve Qwen3.8-27B from its official Hugging Face checkpoint."""
-    asyncio.run(
-        Inference(name="Inference").qwen_setup(
+    effective_host = "0.0.0.0" if public_access else host
+
+    async def run() -> None:
+        inference = Inference(name="Inference")
+        await inference.qwen_setup(
             quant=quant,
             context=context,
-            host=host,
+            host=effective_host,
             port=port,
             keep_bf16=keep_bf16,
         )
-    )
+
+        # install_service() rewrites and reloads the unit, but an already-active
+        # service must be explicitly restarted for new host/port arguments to
+        # reach the running llama-server process.
+        await _apply_inference_networking(
+            inference,
+            host=effective_host,
+            port=port,
+            public_access=public_access,
+        )
+
+        if public_access:
+            click.echo(f"✓ Public inference listener enabled on 0.0.0.0:{port}")
+            click.echo("! Router/NAT port forwarding is still required for inbound IPv4 Internet access")
+            click.echo("! The endpoint is plain HTTP; use TLS or a VPN before sending API keys over the public Internet")
+
+    _run_cli(run())
 
 
 @inference_cli.command(name="key")
