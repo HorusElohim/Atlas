@@ -16,12 +16,13 @@ class Codex(Entity):
 
     install_url: str = "https://chatgpt.com/codex/install.sh"
     home: Path = data.Field(default_factory=lambda: Path.home() / ".codex")
+    bin_dir: Path = data.Field(default_factory=lambda: Path.home() / ".local" / "bin")
     system_launcher: Path = Path("/usr/local/bin/codex")
 
     @property
     def local_launcher(self) -> Path:
         """Return the default launcher created by the official standalone installer."""
-        return Path.home() / ".local" / "bin" / "codex"
+        return self.bin_dir / "codex"
 
     @property
     def executable(self) -> Path | None:
