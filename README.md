@@ -45,7 +45,25 @@ or with `wget`:
 wget -qO- https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
-The bootstrap is idempotent and performs the machine-level setup that must happen before Atlas can manage itself:
+At startup the bootstrap presents a small component menu:
+
+```text
+Atlas bootstrap
+───────────────
+Atlas core is always installed.
+
+Optional components:
+  1. Hermes Agent
+  2. Shell environment (Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator)
+  a. Everything
+
+Select optional components, comma-separated [Atlas core only]:
+>
+```
+
+Press Enter for Atlas core only, use `1` or `2` for one optional component, `1,2` for both, or `a` for everything.
+
+The bootstrap is idempotent and the Atlas core performs the machine-level setup that must happen before Atlas can manage itself:
 
 1. Updates apt and installs the base build, Git, SSH and Python prerequisites.
 2. Installs the official GitHub CLI package.
@@ -56,15 +74,24 @@ The bootstrap is idempotent and performs the machine-level setup that must happe
 7. Switches the repository remote to the dedicated SSH identity.
 8. Creates `~/Atlas/.venv`.
 9. Installs Atlas editable into the virtual environment.
-10. Runs `atlas inspect`.
+10. Installs selected optional components.
+11. Runs `atlas inspect`.
 
 The first GitHub authentication may open a browser/device flow. Re-running the bootstrap reuses the existing key, GitHub authorization, checkout and virtual environment.
+
+For non-interactive or remote deployment, bypass the menu with `ATLAS_COMPONENTS`. Accepted component names are `hermes`, `shell`, `all`, `none` and their menu numbers:
+
+```bash
+ATLAS_COMPONENTS=hermes,shell \
+curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
 
 Optional environment overrides:
 
 ```bash
 ATLAS_DIR="$HOME/dev/Atlas" \
 ATLAS_SSH_KEY="$HOME/.ssh/my_atlas_key" \
+ATLAS_COMPONENTS=all \
 curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
@@ -72,13 +99,13 @@ For unattended machine keys, the bootstrap creates the Ed25519 key without a pas
 
 ## Shell setup
 
-Interactive shell customization is opt-in:
+Interactive shell customization can also be applied independently:
 
 ```bash
 atlas ohmyzsh setup
 ```
 
-Atlas installs Zsh, Oh My Zsh, Powerlevel10k and the recommended MesloLGS NF font family, preserves the existing `.zshrc`, selects the Powerlevel10k theme, configures GNOME Terminal when available, and makes Zsh the login shell.
+Atlas installs Zsh, Oh My Zsh, Powerlevel10k, the recommended MesloLGS NF font family and Terminator, preserves the existing `.zshrc`, selects the Powerlevel10k theme, configures the terminal fonts, makes Terminator the default terminal emulator, and makes Zsh the login shell.
 
 Open a new terminal or run:
 
@@ -90,7 +117,7 @@ Then use `p10k configure` to choose the final prompt style.
 
 ## Hermes
 
-Install and prepare Hermes natively on a node:
+Install and configure Hermes natively on a node:
 
 ```bash
 atlas hermes setup
@@ -119,6 +146,7 @@ atlas inspect
 - [x] Atlas package and CLI foundation
 - [x] Local hardware inspection
 - [x] One-command Linux bootstrap
+- [x] Interactive bootstrap component selection
 - [x] Hermes native installer and configuration
 - [x] Optional Oh My Zsh + Powerlevel10k environment
 - [ ] SSH node transport
