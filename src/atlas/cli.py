@@ -20,26 +20,13 @@ def main() -> None:
 
 @main.command()
 def inspect() -> None:
-    """Inspect this machine and print only Atlas-relevant, non-secret capabilities."""
+    """Inspect this machine and print Atlas-relevant capabilities."""
     hardware = asyncio.run(Hardware.inspect())
-    platform = hardware.platform
-    payload = {
-        "platform": {
-            "system": platform.system,
-            "node": platform.node,
-            "release": platform.release,
-            "arch": platform.arch,
-            "processor": platform.processor,
-            "python_version": platform.python_version,
-        },
-        "device_model": hardware.device_model,
-        "memory_mib": hardware.memory_mib,
-        "gpu": hardware.gpu.model_dump(mode="json") if hardware.gpu else None,
-        "capabilities": {
-            "hermes": True,
-            "jetson": hardware.is_jetson,
-            "qwen_27b": hardware.can_run_qwen_27b,
-        },
+    payload = hardware.model_dump(mode="json")
+    payload["capabilities"] = {
+        "hermes": True,
+        "jetson": hardware.is_jetson,
+        "qwen_27b": hardware.can_run_qwen_27b,
     }
     click.echo(json.dumps(payload, indent=2))
 
