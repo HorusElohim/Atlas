@@ -10,6 +10,7 @@ from pathlib import Path
 import rich_click as click
 from bundle.core import Process, ProcessError, ProcessStream
 
+from .codex import Codex
 from .hardware import Hardware
 from .hermes import Hermes
 from .inference import Inference
@@ -21,6 +22,9 @@ def _run_cli(coroutine) -> None:
     """Run one async Atlas operation and present expected failures as CLI errors."""
     try:
         asyncio.run(coroutine)
+    except ProcessError as error:
+        detail = (error.result.stderr or error.result.stdout).strip()
+        raise click.ClickException(detail or f"Command failed with exit code {error.result.returncode}.") from error
     except (RuntimeError, ValueError) as error:
         raise click.ClickException(str(error)) from error
 
@@ -89,6 +93,36 @@ def inspect() -> None:
         "qwen_27b": hardware.can_run_qwen_27b,
     }
     click.echo(json.dumps(payload, indent=2))
+
+
+@main.group(name="codex")
+def codex_cli() -> None:
+    """Manage the OpenAI Codex CLI on this node."""
+
+
+@codex_cli.command(name="setup")
+@click.option("--skip-login", is_flag=True, help="Install Codex without starting ChatGPT device-code authentication.")
+def codex_setup(skip_login: bool) -> None:
+    """Install Codex and authenticate this node with ChatGPT device-code login."""
+    _run_cli(Codex(name="Codex").setup(login=not skip_login))
+
+
+@codex_cli.command(name="login")
+def codex_login() -> None:
+    """Authenticate Codex using the device-code flow for headless machines."""
+    _run_cli(Codex(name="Codex").login())
+
+
+@codex_cli.command(name="status")
+def codex_status() -> None:
+    """Show the installed Codex version and authentication state."""
+    _run_cli(Codex(name="Codex").status())
+
+
+@codex_cli.command(name="logout")
+def codex_logout() -> None:
+    """Remove the stored Codex authentication on this node."""
+    _run_cli(Codex(name="Codex").logout())
 
 
 @main.command(name="validate")
