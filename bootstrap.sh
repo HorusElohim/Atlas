@@ -10,6 +10,9 @@ ATLAS_SSH_KEY="${ATLAS_SSH_KEY:-$HOME/.ssh/id_ed25519_atlas}"
 HTTPS_URL="https://github.com/${ATLAS_GITHUB_USER}/${ATLAS_REPO}.git"
 SSH_URL="git@github-atlas:${ATLAS_GITHUB_USER}/${ATLAS_REPO}.git"
 
+INSTALL_HERMES=false
+INSTALL_SHELL=false
+
 log() {
     printf '\n\033[1;36mAtlas\033[0m  %s\n' "$*"
 }
@@ -27,6 +30,67 @@ run_with_tty() {
     fi
 }
 
+enable_component() {
+    case "${1,,}" in
+        ""|none|core|atlas)
+            ;;
+        1|hermes)
+            INSTALL_HERMES=true
+            ;;
+        2|shell|ohmyzsh|zsh)
+            INSTALL_SHELL=true
+            ;;
+        a|all)
+            INSTALL_HERMES=true
+            INSTALL_SHELL=true
+            ;;
+        *)
+            die "Unknown bootstrap component: $1"
+            ;;
+    esac
+}
+
+select_components() {
+    if [[ -n "${ATLAS_COMPONENTS:-}" ]]; then
+        local normalized="${ATLAS_COMPONENTS//,/ }"
+        local component
+        for component in $normalized; do
+            enable_component "$component"
+        done
+        return
+    fi
+
+    if [[ ! -r /dev/tty ]]; then
+        log "No interactive terminal detected; installing Atlas core only"
+        return
+    fi
+
+    cat > /dev/tty <<'EOF_MENU'
+
+Atlas bootstrap
+───────────────
+Atlas core is always installed (system prerequisites, GitHub SSH, checkout, venv and inspect).
+
+Optional components:
+  1. Hermes Agent
+  2. Shell environment (Zsh + Oh My Zsh + Powerlevel10k + MesloLGS NF + Terminator)
+  a. Everything
+
+Select optional components, comma-separated [Atlas core only]:
+> 
+EOF_MENU
+
+    local selection=""
+    IFS= read -r selection < /dev/tty || true
+    [[ -z "$selection" ]] && return
+
+    selection="${selection//,/ }"
+    local component
+    for component in $selection; do
+        enable_component "$component"
+    done
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
     die "The bootstrap currently supports Linux nodes only."
 fi
@@ -38,6 +102,10 @@ elif command -v sudo >/dev/null 2>&1; then
 else
     die "sudo is required when bootstrap is not run as root."
 fi
+
+select_components
+
+log "Bootstrap selection: Atlas core$(if $INSTALL_HERMES; then printf ' + Hermes'; fi)$(if $INSTALL_SHELL; then printf ' + Shell'; fi)"
 
 log "Installing system prerequisites"
 $SUDO apt-get update
@@ -99,7 +167,7 @@ else
     : > "$SSH_CONFIG_TMP"
 fi
 
-cat >> "$SSH_CONFIG_TMP" <<EOF
+cat >> "$SSH_CONFIG_TMP" <<EOF_SSH
 
 $BEGIN_MARKER
 Host github-atlas
@@ -109,7 +177,7 @@ Host github-atlas
     IdentitiesOnly yes
     HostKeyAlias github.com
 $END_MARKER
-EOF
+EOF_SSH
 
 install -m 0600 "$SSH_CONFIG_TMP" "$SSH_CONFIG"
 rm -f "$SSH_CONFIG_TMP"
@@ -166,6 +234,16 @@ fi
 
 "$VENV/bin/python" -m pip install --upgrade pip
 "$VENV/bin/python" -m pip install -e "$ATLAS_DIR"
+
+if $INSTALL_SHELL; then
+    log "Configuring shell environment"
+    run_with_tty "$VENV/bin/atlas" ohmyzsh setup
+fi
+
+if $INSTALL_HERMES; then
+    log "Configuring Hermes Agent"
+    run_with_tty "$VENV/bin/atlas" hermes setup
+fi
 
 log "Inspecting this node"
 "$VENV/bin/atlas" inspect
