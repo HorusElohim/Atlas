@@ -136,6 +136,62 @@ Run diagnostics independently with:
 atlas hermes doctor
 ```
 
+Hermes is also exposed as `/usr/local/bin/hermes`, so the native command remains usable independently of Atlas.
+
+## GPU inference
+
+Atlas manages a pinned CUDA build of `llama.cpp` on discrete NVIDIA GPU nodes. The initial Qwen profile targets `Qwen/Qwen3.8-27B` with a 65,536-token context window.
+
+First prepare the inference engine on the GPU node:
+
+```bash
+atlas inference setup
+```
+
+This validates the NVIDIA GPU and CUDA compiler, installs build dependencies, checks out the Atlas-pinned `llama.cpp` revision, and builds `llama-server` with CUDA. It does not download a model unless a GGUF repository is explicitly selected.
+
+Once a verified Qwen3.8-27B GGUF repository is available, deploy it with:
+
+```bash
+atlas inference setup \
+  --hf-repo <verified-Qwen3.8-27B-GGUF-repository> \
+  --quant Q4_K_M \
+  --context 65536 \
+  --host <trusted-LAN-or-VPN-address>
+```
+
+The generated `atlas-inference` systemd service uses:
+
+- the stable API model alias `Qwen3.8-27B`;
+- one inference slot for the 24 GB single-GPU profile;
+- full GPU layer offload;
+- Flash Attention;
+- quantized `q4_0` K/V cache;
+- a persistent API key stored at `~/.config/atlas/inference/api-key`;
+- an OpenAI-compatible server on port `8080` by default.
+
+The default listen address is `127.0.0.1`. For another Atlas node to consume inference, bind the service only to a trusted LAN or VPN address rather than exposing it publicly.
+
+Inspect the service with:
+
+```bash
+atlas inference status
+```
+
+Print the local API key when you need to provision an agent node:
+
+```bash
+atlas inference key
+```
+
+Then connect Hermes on an edge node:
+
+```bash
+atlas hermes connect http://<gpu-node>:8080/v1
+```
+
+Atlas verifies `/v1/models`, prompts for the inference API key without echoing it, and configures Hermes with a named `custom:atlas` provider. You can also supply the key through `ATLAS_INFERENCE_API_KEY` or `--api-key-file`.
+
 ## Development
 
 Atlas requires Python 3.10+.
@@ -157,10 +213,13 @@ atlas inspect
 - [x] Existing GitHub SSH/agent reuse
 - [x] Hermes native installer and configuration
 - [x] Optional Oh My Zsh + Powerlevel10k environment
+- [x] Pinned CUDA llama.cpp inference implementation
+- [x] Authenticated systemd inference service implementation
+- [x] Hermes custom-provider connection implementation
+- [ ] Verify CUDA inference on the RTX 3090 node
+- [ ] Select and verify a Qwen3.8-27B GGUF artifact
+- [ ] Benchmark Qwen3.8-27B quantizations on the RTX 3090
 - [ ] SSH node transport
-- [ ] CUDA-enabled llama.cpp deployment
-- [ ] Qwen3.8-27B model management
-- [ ] systemd services
 - [ ] Multi-node inventory and health
 - [ ] `atlas run <node> "..."`
 
