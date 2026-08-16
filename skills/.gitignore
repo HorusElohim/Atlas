@@ -2,3 +2,5 @@
 .bundled_manifest
 .curator_state
 .hub/
+.usage.json
+.usage.json.lock
