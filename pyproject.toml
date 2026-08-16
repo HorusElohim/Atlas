@@ -12,6 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "HorusElohim" }]
 dependencies = [
     "thebundle @ git+https://github.com/HorusElohim/TheBundle.git@7ba399997efdd9eec7ee332b064c03bb45880c14",
+    "PyYAML>=6",
     "rich-click>=1.8",
 ]
 
