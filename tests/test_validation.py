@@ -6,6 +6,12 @@ from atlas.hermes import Hermes
 from atlas.validation import Validation
 
 
+def test_validation_success_is_visible(capsys) -> None:
+    Validation(name="TestValidation")._ok("Inference validation passed")
+
+    assert capsys.readouterr().out == "✓ Inference validation passed\n"
+
+
 def test_model_ids_extract_openai_catalog() -> None:
     validation = Validation(name="TestValidation")
 
