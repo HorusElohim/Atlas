@@ -15,6 +15,14 @@ from .ohmyzsh import OhMyZsh
 from .validation import Validation
 
 
+def _run_cli(coroutine) -> None:
+    """Run one async Atlas operation and present expected failures as CLI errors."""
+    try:
+        asyncio.run(coroutine)
+    except (RuntimeError, ValueError) as error:
+        raise click.ClickException(str(error)) from error
+
+
 @click.group()
 def main() -> None:
     """Orchestrate a distributed Hermes agent fleet."""
@@ -44,7 +52,7 @@ def validate(host: str, port: int) -> None:
         await validation.inference(Inference(name="Inference"), host=host, port=port)
         await validation.hermes(Hermes(name="Hermes"))
 
-    asyncio.run(run())
+    _run_cli(run())
 
 
 @main.group(name="hermes")
@@ -98,7 +106,7 @@ def hermes_connect(
     if not api_key:
         raise click.UsageError("An inference API key is required.")
 
-    asyncio.run(
+    _run_cli(
         Hermes(name="Hermes").connect(
             base_url,
             api_key,
@@ -113,7 +121,7 @@ def hermes_connect(
 @click.option("--model", default="Qwen3.8-27B", show_default=True, help="Local model alias.")
 @click.option("--context", default=65_536, show_default=True, type=int, help="Configured model context window.")
 def hermes_connect_local(port: int, model: str, context: int) -> None:
-    """Point Hermes at the Atlas inference service running on this same machine."""
+    """Validate and point Hermes at the Atlas inference service on this machine."""
     inference = Inference(name="Inference")
     if not inference.api_key_file.is_file():
         raise click.ClickException(
@@ -124,20 +132,29 @@ def hermes_connect_local(port: int, model: str, context: int) -> None:
     if not api_key:
         raise click.ClickException(f"Atlas inference API key is empty: {inference.api_key_file}")
 
-    asyncio.run(
-        Hermes(name="Hermes").connect(
+    async def run() -> None:
+        # Do not mutate Hermes until the local service and model have proven that
+        # they can answer a real OpenAI-compatible completion.
+        await Validation(name="Validation").inference(
+            inference,
+            host="127.0.0.1",
+            port=port,
+            model=model,
+        )
+        await Hermes(name="Hermes").connect(
             f"http://127.0.0.1:{port}/v1",
             api_key,
             model=model,
             context=context,
         )
-    )
+
+    _run_cli(run())
 
 
 @hermes_cli.command(name="validate")
 def hermes_validate() -> None:
     """Validate Hermes configuration, endpoint reachability and a real one-shot model response."""
-    asyncio.run(Validation(name="Validation").hermes(Hermes(name="Hermes")))
+    _run_cli(Validation(name="Validation").hermes(Hermes(name="Hermes")))
 
 
 @hermes_cli.command(name="doctor")
@@ -218,7 +235,7 @@ def inference_status() -> None:
 @click.option("--model", default="Qwen3.8-27B", show_default=True, help="Expected model alias.")
 def inference_validate(host: str, port: int, model: str) -> None:
     """Validate the service, HTTP API, advertised model and a real Qwen completion."""
-    asyncio.run(
+    _run_cli(
         Validation(name="Validation").inference(
             Inference(name="Inference"),
             host=host,
