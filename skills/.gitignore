@@ -1,0 +1,4 @@
+# Local per-device Hermes state; not meant to sync
+.bundled_manifest
+.curator_state
+.hub/
