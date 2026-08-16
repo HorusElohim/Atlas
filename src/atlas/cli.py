@@ -129,6 +129,30 @@ def inference_setup(hf_repo: str | None, quant: str, context: int, host: str, po
     )
 
 
+@inference_cli.group(name="qwen")
+def inference_qwen_cli() -> None:
+    """Manage the Atlas Qwen3.8-27B model profile."""
+
+
+@inference_qwen_cli.command(name="setup")
+@click.option("--quant", default="Q4_K_M", show_default=True, help="GGUF quantization to build.")
+@click.option("--context", default=65_536, show_default=True, type=int, help="Server context size in tokens.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Inference listen address.")
+@click.option("--port", default=8_080, show_default=True, type=int, help="Inference listen port.")
+@click.option("--keep-bf16", is_flag=True, help="Keep the large intermediate BF16 GGUF after quantization.")
+def inference_qwen_setup(quant: str, context: int, host: str, port: int, keep_bf16: bool) -> None:
+    """Convert, quantize and serve Qwen3.8-27B from its official Hugging Face checkpoint."""
+    asyncio.run(
+        Inference(name="Inference").qwen_setup(
+            quant=quant,
+            context=context,
+            host=host,
+            port=port,
+            keep_bf16=keep_bf16,
+        )
+    )
+
+
 @inference_cli.command(name="key")
 def inference_key() -> None:
     """Print the API key used by the Atlas inference endpoint."""
