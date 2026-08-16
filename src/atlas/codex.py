@@ -84,7 +84,7 @@ class Codex(Entity):
         process = ProcessStream(name="Atlas.Codex") if stream else Process(name="Atlas.Codex")
         return await process(command)
 
-    async def version(self) -> ProcessResult:
+    async def show_version(self) -> ProcessResult:
         """Print the installed Codex CLI version."""
         return await self.command("--version")
 
@@ -120,7 +120,7 @@ class Codex(Entity):
         if not self.installed:
             raise RuntimeError("Codex is not installed. Run `atlas codex setup` first.")
 
-        await self.version()
+        await self.show_version()
         try:
             await self.login_status()
         except ProcessError as error:
@@ -131,7 +131,7 @@ class Codex(Entity):
         """Install Codex and authenticate this node when requested."""
         await self.install()
         await self.expose()
-        await self.version()
+        await self.show_version()
 
         if login and not await self.is_logged_in():
             log.info("Starting Codex device-code authentication.")
