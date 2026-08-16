@@ -91,14 +91,19 @@ class Codex(Entity):
         """Show the authentication state reported by Codex."""
         return await self.command("login", "status", stream=stream)
 
+    @staticmethod
+    def _login_status_text(result: ProcessResult) -> str:
+        """Normalize Codex login status output for state detection."""
+        return f"{result.stdout}\n{result.stderr}".strip().lower()
+
     async def is_logged_in(self) -> bool:
         """Return whether Codex reports a usable stored login."""
         try:
             result = await self.login_status(stream=False)
-        except ProcessError:
-            return False
+        except ProcessError as error:
+            result = error.result
 
-        text = f"{result.stdout}\n{result.stderr}".strip().lower()
+        text = self._login_status_text(result)
         return "not logged in" not in text and "logged in" in text
 
     async def login(self) -> ProcessResult:
@@ -110,12 +115,16 @@ class Codex(Entity):
         return await self.command("logout")
 
     async def status(self) -> None:
-        """Print version and authentication status."""
+        """Print version and authentication status without failing when logged out."""
         if not self.installed:
             raise RuntimeError("Codex is not installed. Run `atlas codex setup` first.")
 
         await self.version()
-        await self.login_status()
+        try:
+            await self.login_status()
+        except ProcessError as error:
+            if "not logged in" not in self._login_status_text(error.result):
+                raise
 
     async def setup(self, *, login: bool = True) -> None:
         """Install Codex and authenticate this node when requested."""
@@ -127,4 +136,4 @@ class Codex(Entity):
             log.info("Starting Codex device-code authentication.")
             await self.login()
 
-        await self.login_status()
+        await self.status()
