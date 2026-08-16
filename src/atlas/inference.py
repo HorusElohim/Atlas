@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import shlex
+import shutil
 from pathlib import Path
 
 from bundle.core import Entity, Process, ProcessError, ProcessResult, ProcessStream, data, logger
@@ -38,6 +39,34 @@ class Inference(Entity):
     @property
     def server(self) -> Path:
         return self.build_dir / "bin" / "llama-server"
+
+    @property
+    def quantizer(self) -> Path:
+        return self.build_dir / "bin" / "llama-quantize"
+
+    @property
+    def model_dir(self) -> Path:
+        return self.root / "models"
+
+    @property
+    def conversion_venv(self) -> Path:
+        return self.root / "convert-venv"
+
+    @property
+    def conversion_python(self) -> Path:
+        return self.conversion_venv / "bin" / "python"
+
+    @property
+    def conversion_requirements(self) -> Path:
+        return self.source_dir / "requirements" / "requirements-convert_hf_to_gguf.txt"
+
+    @property
+    def qwen_bf16(self) -> Path:
+        return self.model_dir / f"{self.model_alias}-BF16.gguf"
+
+    def qwen_quantized(self, quant: str) -> Path:
+        """Return the local GGUF path for one Qwen quantization."""
+        return self.model_dir / f"{self.model_alias}-{quant.upper()}.gguf"
 
     @property
     def api_key_file(self) -> Path:
@@ -76,7 +105,7 @@ class Inference(Entity):
         await ProcessStream(name="Atlas.Inference.Apt")(
             "sudo apt-get update && "
             "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-            "build-essential ca-certificates cmake curl git libcurl4-openssl-dev ninja-build"
+            "build-essential ca-certificates cmake curl git libcurl4-openssl-dev ninja-build python3-venv"
         )
 
     async def checkout(self) -> None:
@@ -98,7 +127,7 @@ class Inference(Entity):
         )
 
     async def build(self) -> None:
-        """Build llama-server with CUDA and libcurl-backed Hugging Face support."""
+        """Build llama-server and llama-quantize with CUDA."""
         configure = " ".join(
             [
                 "cmake",
@@ -113,11 +142,92 @@ class Inference(Entity):
         )
         await ProcessStream(name="Atlas.LlamaCpp.Configure")(configure)
         await ProcessStream(name="Atlas.LlamaCpp.Build")(
-            f"cmake --build {shlex.quote(str(self.build_dir))} --target llama-server --parallel"
+            f"cmake --build {shlex.quote(str(self.build_dir))} "
+            "--target llama-server llama-quantize --parallel"
         )
 
-        if not self.server.is_file():
-            raise RuntimeError(f"llama-server build completed but {self.server} was not created.")
+        missing = [binary for binary in (self.server, self.quantizer) if not binary.is_file()]
+        if missing:
+            raise RuntimeError(f"llama.cpp build completed but binaries are missing: {', '.join(map(str, missing))}")
+
+    async def install_conversion_environment(self) -> None:
+        """Create the isolated Python environment used by llama.cpp's HF converter."""
+        if not self.conversion_python.is_file():
+            await ProcessStream(name="Atlas.Qwen.ConvertVenv")(
+                f"python3 -m venv {shlex.quote(str(self.conversion_venv))}"
+            )
+
+        await ProcessStream(name="Atlas.Qwen.ConvertPip")(
+            f"{shlex.quote(str(self.conversion_python))} -m pip install --upgrade pip && "
+            f"{shlex.quote(str(self.conversion_python))} -m pip install -r "
+            f"{shlex.quote(str(self.conversion_requirements))}"
+        )
+
+    def require_conversion_disk(self, *, minimum_gib: int = 80) -> None:
+        """Require enough free disk for the temporary BF16 GGUF and final quant."""
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        if self.qwen_bf16.is_file():
+            return
+
+        free = shutil.disk_usage(self.model_dir).free
+        required = minimum_gib * 1024**3
+        if free < required:
+            free_gib = free / 1024**3
+            raise RuntimeError(
+                f"Qwen conversion needs about {minimum_gib} GiB of free disk; only {free_gib:.1f} GiB is available "
+                f"at {self.model_dir}."
+            )
+
+    async def convert_qwen(self) -> Path:
+        """Convert the official Qwen3.8-27B safetensors checkpoint to BF16 GGUF remotely."""
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        if self.qwen_bf16.is_file():
+            log.info("Reusing existing BF16 GGUF: %s", self.qwen_bf16)
+            return self.qwen_bf16
+
+        converter = self.source_dir / "convert_hf_to_gguf.py"
+        await ProcessStream(name="Atlas.Qwen.Convert")(
+            " ".join(
+                [
+                    shlex.quote(str(self.conversion_python)),
+                    shlex.quote(str(converter)),
+                    "--remote",
+                    "--outtype", "bf16",
+                    "--no-mtp",
+                    "--outfile", shlex.quote(str(self.qwen_bf16)),
+                    shlex.quote(self.source_model),
+                ]
+            )
+        )
+
+        if not self.qwen_bf16.is_file():
+            raise RuntimeError(f"Qwen conversion completed but {self.qwen_bf16} was not created.")
+        return self.qwen_bf16
+
+    async def quantize_qwen(self, *, quant: str = "Q4_K_M") -> Path:
+        """Quantize the BF16 Qwen GGUF for the single-3090 profile."""
+        output = self.qwen_quantized(quant)
+        if output.is_file():
+            log.info("Reusing existing %s GGUF: %s", quant, output)
+            return output
+
+        if not self.qwen_bf16.is_file():
+            raise RuntimeError("The BF16 Qwen GGUF does not exist; run conversion first.")
+
+        await ProcessStream(name="Atlas.Qwen.Quantize")(
+            " ".join(
+                [
+                    shlex.quote(str(self.quantizer)),
+                    shlex.quote(str(self.qwen_bf16)),
+                    shlex.quote(str(output)),
+                    shlex.quote(quant),
+                ]
+            )
+        )
+
+        if not output.is_file():
+            raise RuntimeError(f"Qwen quantization completed but {output} was not created.")
+        return output
 
     def ensure_api_key(self) -> str:
         """Create and persist a private API key for the inference endpoint."""
@@ -133,37 +243,46 @@ class Inference(Entity):
     def service_content(
         self,
         *,
-        hf_repo: str,
+        hf_repo: str | None = None,
+        model_path: Path | None = None,
         quant: str = "Q4_K_M",
         context: int = 65_536,
         host: str = "127.0.0.1",
         port: int = 8_080,
     ) -> str:
-        """Render the systemd unit for one pinned GGUF-backed model server."""
+        """Render the systemd unit for one local or Hugging Face GGUF-backed model server."""
+        if (hf_repo is None) == (model_path is None):
+            raise ValueError("Specify exactly one of hf_repo or model_path.")
+
         user = os.environ.get("USER")
         if not user:
             raise RuntimeError("USER is not set; cannot create the inference service safely.")
 
-        model = f"{hf_repo}:{quant}"
-        args = [
-            str(self.server),
-            "--hf-repo", model,
-            "--alias", self.model_alias,
-            "--host", host,
-            "--port", str(port),
-            "--ctx-size", str(context),
-            "--parallel", "1",
-            "--n-gpu-layers", "all",
-            "--split-mode", "none",
-            "--flash-attn", "on",
-            "--cache-type-k", "q4_0",
-            "--cache-type-v", "q4_0",
-            "--api-key-file", str(self.api_key_file),
-            "--jinja",
-            "--reasoning", "auto",
-            "--metrics",
-            "--no-webui",
-        ]
+        args = [str(self.server)]
+        if model_path is not None:
+            args.extend(["--model", str(model_path)])
+        else:
+            args.extend(["--hf-repo", f"{hf_repo}:{quant}"])
+
+        args.extend(
+            [
+                "--alias", self.model_alias,
+                "--host", host,
+                "--port", str(port),
+                "--ctx-size", str(context),
+                "--parallel", "1",
+                "--n-gpu-layers", "all",
+                "--split-mode", "none",
+                "--flash-attn", "on",
+                "--cache-type-k", "q4_0",
+                "--cache-type-v", "q4_0",
+                "--api-key-file", str(self.api_key_file),
+                "--jinja",
+                "--reasoning", "auto",
+                "--metrics",
+                "--no-webui",
+            ]
+        )
         exec_start = " ".join(shlex.quote(arg) for arg in args)
 
         return (
@@ -188,7 +307,8 @@ class Inference(Entity):
     async def install_service(
         self,
         *,
-        hf_repo: str,
+        hf_repo: str | None = None,
+        model_path: Path | None = None,
         quant: str = "Q4_K_M",
         context: int = 65_536,
         host: str = "127.0.0.1",
@@ -198,7 +318,14 @@ class Inference(Entity):
         self.ensure_api_key()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        unit = self.service_content(hf_repo=hf_repo, quant=quant, context=context, host=host, port=port)
+        unit = self.service_content(
+            hf_repo=hf_repo,
+            model_path=model_path,
+            quant=quant,
+            context=context,
+            host=host,
+            port=port,
+        )
         temporary = self.config_dir / f"{self.service_name}.service"
         temporary.write_text(unit, encoding="utf-8")
 
@@ -232,13 +359,56 @@ class Inference(Entity):
             else:
                 log.info("llama.cpp CUDA engine is not built yet; run `atlas inference setup`.")
 
-            log.info("No model service is configured yet.")
-            log.info("Deploy one with `atlas inference setup --hf-repo <verified-gguf-repo>`.")
+            qwen = self.qwen_quantized("Q4_K_M")
+            if qwen.is_file():
+                log.info("Qwen model is ready at %s", qwen)
+                log.info("Run `atlas inference qwen setup` to install its service.")
+            else:
+                log.info("No model service is configured yet.")
+                log.info("Run `atlas inference qwen setup` to prepare Qwen3.8-27B automatically.")
             return None
 
         return await ProcessStream(name="Atlas.Inference.Status")(
             f"systemctl status {shlex.quote(self.service_name)} --no-pager"
         )
+
+    async def qwen_setup(
+        self,
+        *,
+        quant: str = "Q4_K_M",
+        context: int = 65_536,
+        host: str = "127.0.0.1",
+        port: int = 8_080,
+        keep_bf16: bool = False,
+    ) -> Path:
+        """Prepare, convert, quantize and serve Qwen3.8-27B end-to-end."""
+        hardware = await self.validate_hardware()
+        log.info("Preparing %s on %s (%s MiB VRAM)", self.model_alias, hardware.gpu.name, hardware.gpu.memory_mib)
+
+        await self.install_packages()
+        await self.checkout()
+        await self.build()
+
+        quantized = self.qwen_quantized(quant)
+        if not quantized.is_file():
+            self.require_conversion_disk()
+            await self.install_conversion_environment()
+            await self.convert_qwen()
+            quantized = await self.quantize_qwen(quant=quant)
+
+        if not keep_bf16 and self.qwen_bf16.is_file():
+            self.qwen_bf16.unlink()
+            log.info("Removed intermediate BF16 GGUF: %s", self.qwen_bf16)
+
+        await self.install_service(
+            model_path=quantized,
+            quant=quant,
+            context=context,
+            host=host,
+            port=port,
+        )
+        log.info("%s inference is ready at %s:%s/v1", self.model_alias, host, port)
+        return quantized
 
     async def setup(
         self,
@@ -259,7 +429,7 @@ class Inference(Entity):
         if hf_repo is None:
             log.info("llama.cpp CUDA engine is ready at %s", self.server)
             log.info("Qwen source model: %s", self.source_model)
-            log.info("No GGUF repository selected yet; engine setup is complete without starting a model service.")
+            log.info("Run `atlas inference qwen setup` to convert, quantize and deploy it automatically.")
             return
 
         await self.install_service(hf_repo=hf_repo, quant=quant, context=context, host=host, port=port)
