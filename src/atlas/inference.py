@@ -20,6 +20,7 @@ class Inference(Entity):
     llama_repo: str = "https://github.com/ggml-org/llama.cpp.git"
     llama_revision: str = "10bf611e533d81f739128304991c5e133c6aebd8"
     source_model: str = "Qwen/Qwen3.8-27B"
+    model_alias: str = "Qwen3.8-27B"
 
     root: Path = data.Field(default_factory=lambda: Path.home() / ".local" / "share" / "atlas" / "inference")
     config_dir: Path = data.Field(default_factory=lambda: Path.home() / ".config" / "atlas" / "inference")
@@ -71,11 +72,11 @@ class Inference(Entity):
         return hardware
 
     async def install_packages(self) -> None:
-        """Install build and Hugging Face download dependencies for llama.cpp."""
+        """Install build dependencies for CUDA llama.cpp."""
         await ProcessStream(name="Atlas.Inference.Apt")(
             "sudo apt-get update && "
             "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-            "build-essential ca-certificates cmake git libcurl4-openssl-dev ninja-build"
+            "build-essential ca-certificates cmake curl git libcurl4-openssl-dev ninja-build"
         )
 
     async def checkout(self) -> None:
@@ -147,9 +148,11 @@ class Inference(Entity):
         args = [
             str(self.server),
             "--hf-repo", model,
+            "--alias", self.model_alias,
             "--host", host,
             "--port", str(port),
             "--ctx-size", str(context),
+            "--parallel", "1",
             "--n-gpu-layers", "all",
             "--split-mode", "none",
             "--flash-attn", "on",
@@ -206,6 +209,20 @@ class Inference(Entity):
         await ProcessStream(name="Atlas.Inference.Systemd.Enable")(
             f"sudo systemctl enable --now {shlex.quote(self.service_name)}"
         )
+        await self.wait_ready(host=host, port=port)
+
+    async def wait_ready(self, *, host: str, port: int) -> ProcessResult:
+        """Wait until llama-server has loaded the model and reports healthy."""
+        health_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+        url = f"http://{health_host}:{port}/health"
+        command = (
+            "for attempt in $(seq 1 360); do "
+            f"if curl -fsS {shlex.quote(url)} >/dev/null 2>&1; then exit 0; fi; "
+            "sleep 5; "
+            "done; "
+            f"echo 'Timed out waiting for {shlex.quote(url)}' >&2; exit 1"
+        )
+        return await ProcessStream(name="Atlas.Inference.Health")(command)
 
     async def status(self) -> ProcessResult:
         """Show systemd status for the inference service."""
@@ -236,4 +253,4 @@ class Inference(Entity):
             return
 
         await self.install_service(hf_repo=hf_repo, quant=quant, context=context, host=host, port=port)
-        log.info("Inference service installed: %s:%s (%s)", host, port, f"{hf_repo}:{quant}")
+        log.info("Inference service ready: %s:%s (%s as %s)", host, port, f"{hf_repo}:{quant}", self.model_alias)
