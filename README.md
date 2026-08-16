@@ -140,29 +140,51 @@ Hermes is also exposed as `/usr/local/bin/hermes`, so the native command remains
 
 ## GPU inference
 
-Atlas manages a pinned CUDA build of `llama.cpp` on discrete NVIDIA GPU nodes. The initial Qwen profile targets `Qwen/Qwen3.8-27B` with a 65,536-token context window.
+Atlas manages a pinned CUDA build of `llama.cpp` on discrete NVIDIA GPU nodes. The initial model profile targets the official `Qwen/Qwen3.8-27B` checkpoint with a 65,536-token server context.
 
-First prepare the inference engine on the GPU node:
+To build only the pinned CUDA inference engine:
 
 ```bash
 atlas inference setup
 ```
 
-This validates the NVIDIA GPU and CUDA compiler, installs build dependencies, checks out the Atlas-pinned `llama.cpp` revision, and builds `llama-server` with CUDA. It does not download a model unless a GGUF repository is explicitly selected.
-
-Once a verified Qwen3.8-27B GGUF repository is available, deploy it with:
+For the complete Qwen path, use one command:
 
 ```bash
-atlas inference setup \
-  --hf-repo <verified-Qwen3.8-27B-GGUF-repository> \
-  --quant Q4_K_M \
-  --context 65536 \
-  --host <trusted-LAN-or-VPN-address>
+atlas inference qwen setup
 ```
 
-The generated `atlas-inference` systemd service uses:
+That command is resumable and performs the complete model lifecycle:
+
+1. validates the NVIDIA GPU and CUDA compiler;
+2. installs the required system packages;
+3. checks out the Atlas-pinned `llama.cpp` revision;
+4. builds both `llama-server` and `llama-quantize`;
+5. creates an isolated Python environment for the pinned llama.cpp Hugging Face converter;
+6. reads the official Qwen3.8-27B safetensor checkpoint remotely and converts it to BF16 GGUF;
+7. quantizes the model to `Q4_K_M` by default;
+8. removes the large BF16 intermediate after successful quantization unless `--keep-bf16` is requested;
+9. installs and starts the authenticated `atlas-inference` systemd service;
+10. waits until the OpenAI-compatible endpoint is healthy.
+
+The conversion requires substantial temporary disk space. Atlas checks for approximately 80 GiB free before starting a fresh BF16 conversion. Existing conversion or quantization artifacts are reused, so an interrupted setup can be run again safely.
+
+For a Qwen server consumed only on the same machine:
+
+```bash
+atlas inference qwen setup
+```
+
+For Hermes running on another trusted Atlas node, bind inference to the trusted LAN/VPN interface. For example:
+
+```bash
+atlas inference qwen setup --host 0.0.0.0
+```
+
+The generated service uses:
 
 - the stable API model alias `Qwen3.8-27B`;
+- the local quantized GGUF through llama.cpp's `--model` path;
 - one inference slot for the 24 GB single-GPU profile;
 - full GPU layer offload;
 - Flash Attention;
@@ -170,7 +192,7 @@ The generated `atlas-inference` systemd service uses:
 - a persistent API key stored at `~/.config/atlas/inference/api-key`;
 - an OpenAI-compatible server on port `8080` by default.
 
-The default listen address is `127.0.0.1`. For another Atlas node to consume inference, bind the service only to a trusted LAN or VPN address rather than exposing it publicly.
+Do not expose port `8080` directly to the public internet. Restrict it to a trusted LAN, firewall or VPN.
 
 Inspect the service with:
 
@@ -191,6 +213,14 @@ atlas hermes connect http://<gpu-node>:8080/v1
 ```
 
 Atlas verifies `/v1/models`, prompts for the inference API key without echoing it, and configures Hermes with a named `custom:atlas` provider. You can also supply the key through `ATLAS_INFERENCE_API_KEY` or `--api-key-file`.
+
+A pre-existing verified GGUF repository can still be deployed directly with the lower-level command:
+
+```bash
+atlas inference setup \
+  --hf-repo <verified-Qwen3.8-27B-GGUF-repository> \
+  --quant Q4_K_M
+```
 
 ## Development
 
@@ -214,10 +244,10 @@ atlas inspect
 - [x] Hermes native installer and configuration
 - [x] Optional Oh My Zsh + Powerlevel10k environment
 - [x] Pinned CUDA llama.cpp inference implementation
+- [x] Automated Qwen3.8 safetensors → GGUF → Q4_K_M pipeline
 - [x] Authenticated systemd inference service implementation
 - [x] Hermes custom-provider connection implementation
-- [ ] Verify CUDA inference on the RTX 3090 node
-- [ ] Select and verify a Qwen3.8-27B GGUF artifact
+- [ ] Verify Qwen3.8-27B end-to-end on the RTX 3090 node
 - [ ] Benchmark Qwen3.8-27B quantizations on the RTX 3090
 - [ ] SSH node transport
 - [ ] Multi-node inventory and health
