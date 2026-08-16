@@ -6,7 +6,7 @@ ATLAS_REPO="${ATLAS_REPO:-Atlas}"
 ATLAS_BRANCH="${ATLAS_BRANCH:-stable}"
 ATLAS_DIR="${ATLAS_DIR:-$HOME/Atlas}"
 ATLAS_SSH_KEY="${ATLAS_SSH_KEY:-$HOME/.ssh/id_ed25519_atlas}"
-ATLAS_GITHUB_SETUP="${ATLAS_GITHUB_SETUP:-auto}"
+ATLAS_GITHUB_SETUP="${ATLAS_GITHUB_SETUP:-skip}"
 
 HTTPS_URL="https://github.com/${ATLAS_GITHUB_USER}/${ATLAS_REPO}.git"
 SSH_URL="git@github.com:${ATLAS_GITHUB_USER}/${ATLAS_REPO}.git"
@@ -237,21 +237,12 @@ EOF_SSH
 
 configure_github_access() {
     case "${ATLAS_GITHUB_SETUP,,}" in
-        auto)
+        auto|skip|off|none)
             if have_github_ssh_access; then
                 log "Using existing GitHub SSH access from ssh-agent/config"
                 GIT_REMOTE_URL="$SSH_URL"
             else
-                log "Existing GitHub SSH access not detected; using Atlas-managed enrollment"
-                configure_managed_github
-            fi
-            ;;
-        skip|off|none)
-            if have_github_ssh_access; then
-                log "GitHub enrollment skipped; using existing SSH access"
-                GIT_REMOTE_URL="$SSH_URL"
-            else
-                log "GitHub enrollment skipped; using public HTTPS access"
+                log "Existing GitHub SSH access not detected; using public HTTPS without credential enrollment"
                 GIT_REMOTE_URL="$HTTPS_URL"
             fi
             ;;
@@ -259,7 +250,7 @@ configure_github_access() {
             configure_managed_github
             ;;
         *)
-            die "ATLAS_GITHUB_SETUP must be one of: auto, skip, managed"
+            die "ATLAS_GITHUB_SETUP must be one of: skip, auto, managed"
             ;;
     esac
 }
