@@ -64,23 +64,33 @@ Enter `1` or `2` to toggle that component on or off. You can also enter multiple
 The bootstrap is idempotent and the Atlas core performs the machine-level setup that must happen before Atlas can manage itself:
 
 1. Updates apt and installs the base build, Git, SSH and Python prerequisites.
-2. Installs the official GitHub CLI package.
-3. Creates a dedicated Ed25519 key at `~/.ssh/id_ed25519_atlas` when missing.
-4. Authenticates GitHub interactively when required and registers the public key with the account.
-5. Adds a dedicated `github-atlas` SSH host alias without replacing the machine's normal GitHub SSH configuration.
-6. Clones or updates Atlas in `~/Atlas`.
-7. Switches the repository remote to the dedicated SSH identity.
-8. Creates `~/Atlas/.venv`.
-9. Installs Atlas editable into the virtual environment.
-10. Installs selected optional components.
-11. Runs `atlas inspect`.
+2. Tests the machine's existing GitHub SSH access through its current `ssh-agent` and SSH configuration.
+3. If SSH already works, reuses it directly with no GitHub CLI login, OAuth flow, new key, or SSH alias.
+4. Only when SSH access is missing, falls back to Atlas-managed GitHub enrollment with a dedicated Ed25519 key and GitHub CLI.
+5. Clones or updates Atlas in `~/Atlas`.
+6. Creates `~/Atlas/.venv`.
+7. Installs Atlas editable into the virtual environment.
+8. Installs selected optional components.
+9. Runs `atlas inspect`.
 
-The first GitHub authentication may open a browser/device flow. Re-running the bootstrap reuses the existing key, GitHub authorization, checkout and virtual environment.
+GitHub access behavior can be controlled with `ATLAS_GITHUB_SETUP`:
 
-For non-interactive or remote deployment, bypass the menu with `ATLAS_COMPONENTS`. Accepted component names are `hermes`, `shell`, `all`, `none` and their menu numbers:
+- `auto` (default): reuse working SSH access; otherwise perform Atlas-managed enrollment.
+- `skip`: never request GitHub credentials. Existing SSH is reused when available; otherwise the public repository is accessed over HTTPS.
+- `managed`: always use Atlas's dedicated-key + GitHub CLI enrollment flow.
+
+For a machine where your GitHub key is already loaded in `ssh-agent`, you can explicitly disable enrollment:
+
+```bash
+ATLAS_GITHUB_SETUP=skip \
+curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
+
+For non-interactive or remote deployment, bypass the component menu with `ATLAS_COMPONENTS`. Accepted component names are `hermes`, `shell`, `all`, `none` and their menu numbers:
 
 ```bash
 ATLAS_COMPONENTS=hermes,shell \
+ATLAS_GITHUB_SETUP=skip \
 curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
@@ -90,10 +100,11 @@ Optional environment overrides:
 ATLAS_DIR="$HOME/dev/Atlas" \
 ATLAS_SSH_KEY="$HOME/.ssh/my_atlas_key" \
 ATLAS_COMPONENTS=all \
+ATLAS_GITHUB_SETUP=auto \
 curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
-For unattended machine keys, the bootstrap creates the Ed25519 key without a passphrase by default. Set `ATLAS_SSH_KEY_PASSPHRASE` before running if you explicitly want one.
+`ATLAS_SSH_KEY` and `ATLAS_SSH_KEY_PASSPHRASE` are used only by the managed GitHub enrollment path.
 
 ## Shell setup
 
@@ -145,6 +156,7 @@ atlas inspect
 - [x] Local hardware inspection
 - [x] One-command Linux bootstrap
 - [x] Interactive bootstrap component selection
+- [x] Existing GitHub SSH/agent reuse
 - [x] Hermes native installer and configuration
 - [x] Optional Oh My Zsh + Powerlevel10k environment
 - [ ] SSH node transport
