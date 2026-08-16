@@ -60,11 +60,11 @@ async def test_show_version_is_bound_and_invokes_codex(tmp_path: Path, monkeypat
     )
     calls: list[tuple[str, ...]] = []
 
-    async def fake_command(*args: str, stream: bool = True) -> ProcessResult:
+    async def fake_command(self: Codex, *args: str, stream: bool = True) -> ProcessResult:
         calls.append(args)
         return expected
 
-    monkeypatch.setattr(codex, "command", fake_command)
+    monkeypatch.setattr(Codex, "command", fake_command)
 
     result = await codex.show_version()
 
