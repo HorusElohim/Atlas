@@ -11,16 +11,19 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from bundle.core import Entity, Process, ProcessError, logger
+from bundle.core import Entity, Process, ProcessError
 
 from .hermes import Hermes
 from .inference import Inference
 
-log = logger.get_logger(__name__)
-
 
 class Validation(Entity):
     """Validate Atlas services from engine to Hermes agent response."""
+
+    @staticmethod
+    def _ok(message: str) -> None:
+        """Print one validation success independently of logging configuration."""
+        print(f"✓ {message}", flush=True)
 
     async def inference(
         self,
@@ -44,19 +47,20 @@ class Validation(Entity):
             raise RuntimeError(
                 "atlas-inference.service is installed but is not active. Run `atlas inference status`."
             ) from error
-        log.info("✓ Service active: %s", inference.service_name)
+        self._ok(f"Service active: {inference.service_name}")
 
         if not inference.api_key_file.is_file():
             raise RuntimeError(f"Inference API key is missing: {inference.api_key_file}")
         api_key = inference.api_key_file.read_text(encoding="utf-8").strip()
         if not api_key:
             raise RuntimeError(f"Inference API key is empty: {inference.api_key_file}")
+        self._ok("Inference API key available")
 
         base_url = f"http://{host}:{port}/v1"
         selected_model = model or inference.model_alias
 
         await asyncio.to_thread(self._request_json, f"http://{host}:{port}/health", api_key)
-        log.info("✓ HTTP health reachable: http://%s:%s/health", host, port)
+        self._ok(f"HTTP health reachable: http://{host}:{port}/health")
 
         models = await asyncio.to_thread(self._request_json, f"{base_url}/models", api_key)
         model_ids = self._model_ids(models)
@@ -65,7 +69,7 @@ class Validation(Entity):
                 f"Inference endpoint is reachable but model {selected_model!r} is not advertised; "
                 f"available models: {', '.join(model_ids) or '<none>'}."
             )
-        log.info("✓ Model advertised: %s", selected_model)
+        self._ok(f"Model advertised: {selected_model}")
 
         reply = await asyncio.to_thread(
             self._completion,
@@ -76,7 +80,8 @@ class Validation(Entity):
         )
         if not reply:
             raise RuntimeError("Qwen returned an empty completion.")
-        log.info("✓ Qwen completion works: %s", self._preview(reply))
+        self._ok(f"Qwen completion works: {self._preview(reply)}")
+        self._ok("Inference validation passed")
 
     async def hermes(self, hermes: Hermes) -> None:
         """Validate Hermes config, configured endpoint reachability and one Hermes one-shot response."""
@@ -84,8 +89,8 @@ class Validation(Entity):
             raise RuntimeError("Hermes is not installed. Run `atlas hermes setup` first.")
 
         base_url, api_key, model = self._configured_hermes_target(hermes)
-        log.info("✓ Hermes provider configured: custom:%s", hermes.atlas_provider_name)
-        log.info("✓ Hermes model configured: %s", model)
+        self._ok(f"Hermes provider configured: custom:{hermes.atlas_provider_name}")
+        self._ok(f"Hermes model configured: {model}")
 
         models = await asyncio.to_thread(self._request_json, f"{base_url}/models", api_key)
         model_ids = self._model_ids(models)
@@ -94,7 +99,7 @@ class Validation(Entity):
                 f"Hermes endpoint {base_url} is reachable but does not advertise {model!r}; "
                 f"available models: {', '.join(model_ids) or '<none>'}."
             )
-        log.info("✓ Hermes endpoint reachable: %s", base_url)
+        self._ok(f"Hermes endpoint reachable: {base_url}")
 
         executable = hermes.executable
         if executable is None:
@@ -112,7 +117,8 @@ class Validation(Entity):
         reply = result.stdout.strip()
         if not reply:
             raise RuntimeError("Hermes completed without returning a response.")
-        log.info("✓ Hermes → Qwen end-to-end works: %s", self._preview(reply))
+        self._ok(f"Hermes → Qwen end-to-end works: {self._preview(reply)}")
+        self._ok("Hermes validation passed")
 
     def _configured_hermes_target(self, hermes: Hermes) -> tuple[str, str, str]:
         """Resolve the Atlas provider selected by Hermes without exposing its secret."""
@@ -253,6 +259,6 @@ class Validation(Entity):
 
     @staticmethod
     def _preview(text: str, limit: int = 160) -> str:
-        """Return a compact single-line response preview for validation logs."""
+        """Return a compact single-line response preview for validation output."""
         compact = " ".join(text.split())
         return compact if len(compact) <= limit else compact[: limit - 1] + "…"
