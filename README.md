@@ -65,32 +65,24 @@ The bootstrap is idempotent and the Atlas core performs the machine-level setup 
 
 1. Updates apt and installs the base build, Git, SSH and Python prerequisites.
 2. Tests the machine's existing GitHub SSH access through its current `ssh-agent` and SSH configuration.
-3. If SSH already works, reuses it directly with no GitHub CLI login, OAuth flow, new key, or SSH alias.
-4. Only when SSH access is missing, falls back to Atlas-managed GitHub enrollment with a dedicated Ed25519 key and GitHub CLI.
+3. If SSH works, reuses it directly.
+4. If SSH does not work, uses the public Atlas repository over HTTPS without requesting credentials.
 5. Clones or updates Atlas in `~/Atlas`.
 6. Creates `~/Atlas/.venv`.
 7. Installs Atlas editable into the virtual environment.
 8. Installs selected optional components.
 9. Runs `atlas inspect`.
 
-GitHub access behavior can be controlled with `ATLAS_GITHUB_SETUP`:
+GitHub credential enrollment is **never performed by default**. `ATLAS_GITHUB_SETUP` controls the behavior:
 
-- `auto` (default): reuse working SSH access; otherwise perform Atlas-managed enrollment.
-- `skip`: never request GitHub credentials. Existing SSH is reused when available; otherwise the public repository is accessed over HTTPS.
-- `managed`: always use Atlas's dedicated-key + GitHub CLI enrollment flow.
-
-For a machine where your GitHub key is already loaded in `ssh-agent`, you can explicitly disable enrollment:
-
-```bash
-ATLAS_GITHUB_SETUP=skip \
-curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
-```
+- `skip` (default): reuse working SSH access when available; otherwise use public HTTPS. Never request GitHub credentials.
+- `auto`: same non-interactive credential behavior as `skip`; retained as a compatibility alias.
+- `managed`: explicitly opt into Atlas's dedicated Ed25519 key + GitHub CLI enrollment flow.
 
 For non-interactive or remote deployment, bypass the component menu with `ATLAS_COMPONENTS`. Accepted component names are `hermes`, `shell`, `all`, `none` and their menu numbers:
 
 ```bash
 ATLAS_COMPONENTS=hermes,shell \
-ATLAS_GITHUB_SETUP=skip \
 curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
@@ -98,9 +90,15 @@ Optional environment overrides:
 
 ```bash
 ATLAS_DIR="$HOME/dev/Atlas" \
-ATLAS_SSH_KEY="$HOME/.ssh/my_atlas_key" \
 ATLAS_COMPONENTS=all \
-ATLAS_GITHUB_SETUP=auto \
+curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
+```
+
+To explicitly ask Atlas to create and enroll its own GitHub key:
+
+```bash
+ATLAS_GITHUB_SETUP=managed \
+ATLAS_SSH_KEY="$HOME/.ssh/id_ed25519_atlas" \
 curl -fsSL https://raw.githubusercontent.com/HorusElohim/Atlas/stable/bootstrap.sh | bash
 ```
 
