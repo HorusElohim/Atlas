@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from bundle.core import ProcessResult
 
 from atlas.codex import Codex
@@ -46,3 +47,26 @@ def test_login_status_detection() -> None:
 
     assert "logged in" in Codex._login_status_text(logged_in)
     assert "not logged in" in Codex._login_status_text(logged_out)
+
+
+@pytest.mark.asyncio
+async def test_show_version_is_bound_and_invokes_codex(tmp_path: Path, monkeypatch) -> None:
+    codex = make_codex(tmp_path)
+    expected = ProcessResult(
+        command="codex --version",
+        returncode=0,
+        stdout="codex-cli test\n",
+        stderr="",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_command(*args: str, stream: bool = True) -> ProcessResult:
+        calls.append(args)
+        return expected
+
+    monkeypatch.setattr(codex, "command", fake_command)
+
+    result = await codex.show_version()
+
+    assert result == expected
+    assert calls == [("--version",)]
