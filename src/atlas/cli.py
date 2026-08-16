@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import rich_click as click
 
@@ -49,6 +50,49 @@ def hermes_expose() -> None:
     asyncio.run(Hermes(name="Hermes").expose())
 
 
+@hermes_cli.command(name="connect")
+@click.argument("base_url")
+@click.option("--model", default="Qwen3.8-27B", show_default=True, help="Model alias exposed by Atlas inference.")
+@click.option("--context", default=65_536, show_default=True, type=int, help="Configured model context window.")
+@click.option(
+    "--api-key-file",
+    type=click.Path(path_type=Path, dir_okay=False, readable=True),
+    help="Read the Atlas inference API key from a file.",
+)
+@click.option(
+    "--api-key",
+    envvar="ATLAS_INFERENCE_API_KEY",
+    help="Inference API key. Prefer --api-key-file or ATLAS_INFERENCE_API_KEY.",
+)
+def hermes_connect(
+    base_url: str,
+    model: str,
+    context: int,
+    api_key_file: Path | None,
+    api_key: str | None,
+) -> None:
+    """Connect Hermes to an Atlas OpenAI-compatible inference endpoint."""
+    if api_key_file is not None and api_key is not None:
+        raise click.UsageError("Use either --api-key-file or --api-key, not both.")
+
+    if api_key_file is not None:
+        api_key = api_key_file.read_text(encoding="utf-8").strip()
+    elif api_key is None:
+        api_key = click.prompt("Inference API key", hide_input=True).strip()
+
+    if not api_key:
+        raise click.UsageError("An inference API key is required.")
+
+    asyncio.run(
+        Hermes(name="Hermes").connect(
+            base_url,
+            api_key,
+            model=model,
+            context=context,
+        )
+    )
+
+
 @hermes_cli.command(name="doctor")
 @click.option("--fix", is_flag=True, help="Apply Hermes automatic configuration and state fixes.")
 @click.option("--strict", is_flag=True, help="Fail when Hermes reports an incomplete configuration.")
@@ -83,6 +127,12 @@ def inference_setup(hf_repo: str | None, quant: str, context: int, host: str, po
             port=port,
         )
     )
+
+
+@inference_cli.command(name="key")
+def inference_key() -> None:
+    """Print the API key used by the Atlas inference endpoint."""
+    click.echo(Inference(name="Inference").ensure_api_key())
 
 
 @inference_cli.command(name="status")
