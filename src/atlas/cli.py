@@ -33,6 +33,20 @@ def inspect() -> None:
     click.echo(json.dumps(payload, indent=2))
 
 
+@main.command(name="validate")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Reachable local inference address to test.")
+@click.option("--port", default=8_080, show_default=True, type=int, help="Local inference port to test.")
+def validate(host: str, port: int) -> None:
+    """Validate this node's Qwen service and Hermes integration end-to-end."""
+
+    async def run() -> None:
+        validation = Validation(name="Validation")
+        await validation.inference(Inference(name="Inference"), host=host, port=port)
+        await validation.hermes(Hermes(name="Hermes"))
+
+    asyncio.run(run())
+
+
 @main.group(name="hermes")
 def hermes_cli() -> None:
     """Manage the Hermes Agent installation on this node."""
