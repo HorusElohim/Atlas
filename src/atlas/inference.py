@@ -224,8 +224,18 @@ class Inference(Entity):
         )
         return await ProcessStream(name="Atlas.Inference.Health")(command)
 
-    async def status(self) -> ProcessResult:
-        """Show systemd status for the inference service."""
+    async def status(self) -> ProcessResult | None:
+        """Show the inference state without treating an unconfigured model service as an error."""
+        if not self.unit_file.is_file():
+            if self.server.is_file():
+                log.info("llama.cpp CUDA engine is ready at %s", self.server)
+            else:
+                log.info("llama.cpp CUDA engine is not built yet; run `atlas inference setup`.")
+
+            log.info("No model service is configured yet.")
+            log.info("Deploy one with `atlas inference setup --hf-repo <verified-gguf-repo>`.")
+            return None
+
         return await ProcessStream(name="Atlas.Inference.Status")(
             f"systemctl status {shlex.quote(self.service_name)} --no-pager"
         )
