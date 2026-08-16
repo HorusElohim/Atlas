@@ -138,6 +138,39 @@ atlas hermes doctor
 
 Hermes is also exposed as `/usr/local/bin/hermes`, so the native command remains usable independently of Atlas.
 
+## OpenAI Codex
+
+Atlas can also install and authenticate the OpenAI Codex CLI independently of Hermes. This gives an Atlas node two separate agent paths: Hermes can use local or remote Qwen inference, while Codex uses OpenAI's Codex service.
+
+Install Codex with OpenAI's official standalone installer and start device-code authentication:
+
+```bash
+atlas codex setup
+```
+
+On a headless machine such as a Jetson, Codex prints a verification URL and one-time code. Open that URL on another device, sign in with ChatGPT, enter the code, and leave the Atlas command running until authentication completes.
+
+Inspect the installed version and login state with:
+
+```bash
+atlas codex status
+```
+
+Authentication can also be managed explicitly:
+
+```bash
+atlas codex login
+atlas codex logout
+```
+
+To install Codex without starting authentication immediately:
+
+```bash
+atlas codex setup --skip-login
+```
+
+Atlas uses OpenAI's standalone installer at `https://chatgpt.com/codex/install.sh`, accepts the installer-managed `~/.local/bin/codex`, and exposes that launcher at `/usr/local/bin/codex` when applicable.
+
 ## GPU inference
 
 Atlas manages a pinned CUDA build of `llama.cpp` on discrete NVIDIA GPU nodes. The initial model profile targets the official `Qwen/Qwen3.8-27B` checkpoint with a 65,536-token server context.
@@ -252,6 +285,7 @@ atlas inspect
 - [x] Interactive bootstrap component selection
 - [x] Existing GitHub SSH/agent reuse
 - [x] Hermes native installer and configuration
+- [x] OpenAI Codex standalone installer + device-auth management
 - [x] Optional Oh My Zsh + Powerlevel10k environment
 - [x] Pinned CUDA llama.cpp inference implementation
 - [x] Automated Qwen3.8 safetensors → GGUF → Q4_K_M pipeline
