@@ -29,7 +29,7 @@ It keeps **agent execution** and **model inference** separate:
 2. **Capability driven** — deployment decisions come from detected hardware, not hostnames.
 3. **Reproducible** — dependencies, models, and runtime parameters are pinned deliberately.
 4. **Minimal orchestration** — Atlas uses Python and [TheBundle](https://github.com/HorusElohim/TheBundle) instead of growing a second configuration language.
-5. **Secure by default** — agent APIs are private to the Atlas network and never intentionally exposed to the public internet.
+5. **Secure by default** — inference stays local unless broader exposure is explicitly requested.
 
 ## Bootstrap a Linux node
 
@@ -175,11 +175,21 @@ For a Qwen server consumed only on the same machine:
 atlas inference qwen setup
 ```
 
-For Hermes running on another trusted Atlas node, bind inference to the trusted LAN/VPN interface. For example:
+For another trusted Atlas node on the LAN/VPN, bind inference to a reachable interface:
 
 ```bash
 atlas inference qwen setup --host 0.0.0.0
 ```
+
+For explicit public IPv4 exposure, use:
+
+```bash
+atlas inference qwen setup --public
+```
+
+`--public` sets the listener to `0.0.0.0`, explicitly restarts an already-running `atlas-inference` service so the new bind address takes effect, waits for Qwen to become healthy again, and, when UFW is installed and active, runs the equivalent of `ufw allow 8080/tcp` so the inference port accepts traffic from any source. A different `--port` is handled the same way.
+
+Router/NAT port forwarding is still required for inbound IPv4 Internet traffic when the Atlas host is behind a typical home router. Atlas cannot configure that router automatically.
 
 The generated service uses:
 
@@ -192,7 +202,7 @@ The generated service uses:
 - a persistent API key stored at `~/.config/atlas/inference/api-key`;
 - an OpenAI-compatible server on port `8080` by default.
 
-Do not expose port `8080` directly to the public internet. Restrict it to a trusted LAN, firewall or VPN.
+The llama.cpp endpoint currently uses plain HTTP. API-key authentication protects access to model routes, but it does not encrypt the bearer token in transit. For Internet use, place Atlas behind TLS or use an encrypted VPN/tunnel before sending credentials over an untrusted network.
 
 Inspect the service with:
 
@@ -247,6 +257,7 @@ atlas inspect
 - [x] Automated Qwen3.8 safetensors → GGUF → Q4_K_M pipeline
 - [x] Authenticated systemd inference service implementation
 - [x] Hermes custom-provider connection implementation
+- [x] Explicit public bind + UFW automation
 - [ ] Verify Qwen3.8-27B end-to-end on the RTX 3090 node
 - [ ] Benchmark Qwen3.8-27B quantizations on the RTX 3090
 - [ ] SSH node transport
