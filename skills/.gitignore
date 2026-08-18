@@ -4,3 +4,4 @@
 .hub/
 .usage.json
 .usage.json.lock
+.curator_ledger.jsonl

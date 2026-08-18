@@ -257,6 +257,19 @@ atlas hermes connect http://<gpu-node>:8080/v1
 
 Atlas verifies `/v1/models`, prompts for the inference API key without echoing it, and configures Hermes with a named `custom:atlas` provider. You can also supply the key through `ATLAS_INFERENCE_API_KEY` or `--api-key-file`.
 
+### Delegated-task routing (cheap local model for grunt work)
+
+`atlas hermes connect` sets Hermes' *primary* model (`model.default` / `model.provider`) — use it when Qwen should drive the whole session, e.g. a pure edge node.
+
+If instead you want to keep a paid frontier model (Claude/GPT) as the primary/orchestrator and only route Hermes' delegated subagent work (`delegate_task`, background/mechanical steps) to the free local Qwen, set `delegation.*` separately — Atlas does not manage this yet, do it by hand once per node after `atlas hermes connect` (or independently of it, as long as the `atlas` provider block already exists in `~/.hermes/config.yaml`):
+
+```bash
+hermes config set delegation.provider atlas
+hermes config set delegation.model Qwen3.8-27B
+```
+
+This keeps the primary model untouched; only subagents spawned via delegation use the local Qwen endpoint. Verify the route works with a throwaway delegated task from inside a Hermes chat.
+
 A pre-existing verified GGUF repository can still be deployed directly with the lower-level command:
 
 ```bash
