@@ -18,11 +18,33 @@ Real distribution from a Rust backend with 293 uncovered lines:
 |---|---|---|
 | **Structurally uncoverable** | `#[cfg(not(test))]` production twin | Exclude from gate |
 | **Skipped-test helpers** | code nested inside an `#[ignore]`d test | Exclude from gate |
-| **Daemon / infinite loops** | `loop { tick.await; … }` supervisor task | Write a driven test |
+| **Daemon / infinite loops** | `loop { tick.await; … }` supervisor task | Write a driven test — see `deterministic-async-ticker-tests.md` for a paused-clock, Notify-gated pattern (no wall-clock sleep) |
 | **Defensive error arms** | `Err(e) => { log!(e); continue }` on a healthy store | Usually justified ignore |
+| **Dead code, zero callers** | a public constructor/method nothing in the codebase calls | Delete it, don't test it |
 
 Only the third bucket is "we owe this code a test." Treating all four as the
 same debt produces either an impossible task or a weakened gate.
+
+## Bucket 5: dead code masquerading as untested code
+
+Before writing a test to close an uncovered-function gap, grep the whole
+workspace for callers of that function/method. A `pub`/`pub(crate)` item with
+zero call sites anywhere — not in production code, not in any test — is not
+an undertested decision path; it's dead weight inflating the denominator.
+Deleting it is the correct fix, not writing a throwaway test that only exists
+to move the percentage. This is a legitimate way to close a coverage gap, on
+equal footing with writing a real test — pick whichever the specific
+uncovered item actually calls for, don't default to "write a test" for every
+line on the list. A real example: `StatusFacts::from_lifecycle` in a Rust
+projection module had a full doc comment and looked production-ready, but
+`grep -rn from_lifecycle` outside its own definition returned nothing —
+deleted rather than tested.
+
+Contrast with a genuinely-uncovered `Debug`/`Display` impl that IS exercised
+by real code paths (formatting, logging) but happens to have no direct test:
+that one gets a real test asserting the actual rendered output, because the
+code is live, just untested — the grep-for-callers step is what tells the two
+cases apart.
 
 ## Bucket 1: `#[cfg(not(test))]` — the trap worth knowing
 

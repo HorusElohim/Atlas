@@ -1,0 +1,98 @@
+{
+  "jobs": [
+    {
+      "id": "627b50f4a8e8",
+      "name": "Portalis hourly dev status",
+      "prompt": "You are the Portalis project supervisor doing an hourly dev-status review. The repo is ~/PortalisApp (Flutter+Rust P2P friend-sharing app, branch dev/smartshare-v3, remote git@github.com:HorusElohim/PortalisApp.git). A status probe script has already run and its output is injected above as context — READ IT FIRST and do not re-run discovery commands that duplicate it.\n\nPROJECT CONTEXT (stable):\n- Owner: HorusElohim. Workflow: agent produces PRs, owner validates/merges. CI must be green before merge.\n- Decisions are frozen ADRs under doc/adr/ (ADRs-only + index, NO living SPEC; code is the current-state map). Plans live in ~/PortalisApp/.hermes/plans/.\n- Architecture spine: Symmetric Peer (one Nexus core; server/client are runtime roles; any node can be both).\n- Agreed decisions: single AppSnapshot+Command API seam (delete generated api.rs path); redb now + Postgres as scale target + delete MongoDB; Substrate redesigned as Strategy-style dual transport (online BitTorrent/librqbit, offline direct device-to-device).\n- Values: clean, simple, efficient, lean. For every problem, name and justify the best design pattern.\n- AGENTS.md rules: atomic commits with emoji+conventional-type prefix, update CHANGELOG.md for user-visible changes, keep Flutter/Rust versions in sync, regenerate FRB bindings on bridge changes, never claim verification you did not run.\n- Host constraint: this Jetson has 7.3GB RAM and no swap, and runs the always-on Hermes gateway/dashboard. NEVER run a full `cargo test --workspace` or `cargo llvm-cov` here — it OOM-kills the linker. Use `cargo check`, `cargo clippy`, or targeted `cargo test -p <crate>` with CARGO_BUILD_JOBS=2.\n\nKNOWN CURRENT BLOCKER: PR #1 CI fails only at the coverage gate (portalis/rust/backend/scripts/coverage.sh, invoked by tests/nexus.sh). All backend tests pass; the gate enforces --fail-under-functions 100 / --fail-under-regions 99 plus a per-line LCOV check. Do not weaken thresholds to force green — find the actually-uncovered line/region from CI logs (`gh run view --job <id> --log-failed`) and either cover it with a real test or extend the documented ignore regex ONLY if the code is a genuine platform adapter consistent with the existing rationale in that script.\n\nYOUR JOB THIS HOUR — assess, then act with restraint:\n1. Summarize dev status in <=6 bullets: branch/HEAD, open PR + CI state, whether anything is in flight, host health.\n2. Decide if action is warranted. Act ONLY if there is clear, unblocked, low-risk work:\n   - If CI is red: investigate the specific failure and, if the fix is unambiguous and small, implement it on a branch and open/update a PR. Follow AGENTS.md. Rebase onto origin before pushing.\n   - If CI is green and PR #1 is unmerged: do NOT merge (owner validates/merges). Report it as ready and stop.\n   - If nothing is in flight and no blocker exists: do ONE useful, bounded thing — e.g. write a pending ADR from the agreed decisions above into doc/adr/ (numbered, frozen format: context/decision/why/consequences, plus update doc/adr/README.md index), or a focused code review of recent commits with concrete findings.\n3. If the right next step would need a human design decision, DO NOT block on it and DO NOT ask. Instead: pick the most reversible, lowest-risk option consistent with the frozen ADRs and the values above, do only work that is safe to throw away (branch/PR, never merge), and log the open decision as a one-line \"OPEN DECISION (owner)\" note at the end of the report plus, if it is architectural, a draft ADR in doc/adr/ marked status: proposed. If no option is safe enough to act on, do nothing and record the note.\n\nHARD RULES:\n- Never force-push, never rewrite published history, never merge PRs.\n- Always `git fetch` + rebase onto origin before pushing.\n- Read-only is a valid outcome. If nothing genuinely needs doing, say so in 2 lines and stop — do not invent work.\n- Do not start long-running builds in the background and leave them; sweep for stray rustc/cargo processes before finishing.\n- Report honestly: never claim a check passed that you did not actually run.\n- You run UNATTENDED on a schedule: no human is present and nothing can answer you. Never ask the user a question, never request confirmation, never use the clarify tool, and never end with a prompt that waits for a reply. Choose a safe default and report it.\n\nOUTPUT: a short status report (the 6 bullets), then what you did or explicitly why you did nothing, then an \"OPEN DECISIONS (owner)\" section listing any decisions you deliberately deferred — stated as items for the owner to review later, not as questions addressed to a reader in this session. Keep it tight.",
+      "skills": [],
+      "skill": null,
+      "model": "claude-opus-5",
+      "provider": "anthropic",
+      "provider_snapshot": null,
+      "model_snapshot": null,
+      "base_url": null,
+      "script": "portalis_status.sh",
+      "no_agent": false,
+      "monitor_script": null,
+      "monitor_url": null,
+      "monitor_state": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *",
+        "display": "0 * * * *"
+      },
+      "schedule_display": "0 * * * *",
+      "repeat": {
+        "times": null,
+        "completed": 47
+      },
+      "enabled": false,
+      "state": "paused",
+      "paused_at": "2026-08-18T22:56:54.175670+02:00",
+      "paused_reason": null,
+      "created_at": "2026-08-16T23:52:22.694571+02:00",
+      "next_run_at": "2026-08-18T23:00:00+02:00",
+      "last_run_at": "2026-08-18T22:21:00.218377+02:00",
+      "last_status": "error",
+      "last_error": "RuntimeError: HTTP 429: This request would exceed your account's rate limit. Please try again later.",
+      "last_delivery_error": null,
+      "deliver": "whatsapp:198788333461714@lid",
+      "origin": null,
+      "enabled_toolsets": [
+        "terminal",
+        "file",
+        "web",
+        "delegation"
+      ],
+      "workdir": null,
+      "fire_claim": null,
+      "failure_streak": 9
+    },
+    {
+      "id": "085a2dbf8aac",
+      "name": "Atlas nightly sync - Jetson",
+      "prompt": "",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "provider_snapshot": null,
+      "model_snapshot": null,
+      "base_url": null,
+      "script": "atlas_sync_jetson.sh",
+      "no_agent": true,
+      "monitor_script": null,
+      "monitor_url": null,
+      "monitor_state": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 12 * * *",
+        "display": "0 12 * * *"
+      },
+      "schedule_display": "0 12 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 13
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-08-18T23:18:18.633407+02:00",
+      "next_run_at": "2026-08-31T12:00:00+02:00",
+      "last_run_at": "2026-08-30T12:00:46.019546+02:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "failure_streak": 0,
+      "deliver": "local",
+      "origin": null,
+      "enabled_toolsets": null,
+      "workdir": null,
+      "fire_claim": null
+    }
+  ],
+  "updated_at": "2026-08-30T12:00:46.021418+02:00"
+}
