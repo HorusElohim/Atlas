@@ -10,6 +10,7 @@ from pathlib import Path
 import rich_click as click
 from bundle.core import Process, ProcessError, ProcessStream
 
+from . import browser as browser_module
 from .codex import Codex
 from .hardware import Hardware
 from .hermes import Hermes
@@ -365,3 +366,26 @@ def ohmyzsh_cli() -> None:
 def ohmyzsh_setup() -> None:
     """Install Oh My Zsh, Powerlevel10k, MesloLGS NF, Terminator and Zsh defaults."""
     asyncio.run(OhMyZsh(name="OhMyZsh").setup())
+
+
+@main.group(name="browser")
+def browser_cli() -> None:
+    """Drive a real headless browser on this node (Playwright/Chromium via Bundle)."""
+
+
+@browser_cli.command(name="check")
+def browser_check() -> None:
+    """Launch headless Chromium and verify it can load a page end to end."""
+    ok = asyncio.run(browser_module.check())
+    if not ok:
+        raise click.ClickException("Headless Chromium launched but page content did not match.")
+    click.echo("✓ Headless Chromium works (Playwright via Bundle)")
+
+
+@browser_cli.command(name="fetch")
+@click.argument("url", type=str)
+@click.option("--headed", is_flag=True, help="Launch with a visible browser window instead of headless.")
+def browser_fetch(url: str, headed: bool) -> None:
+    """Fetch URL with a headless (or --headed) browser and print its title and status."""
+    result = asyncio.run(browser_module.fetch(url, headless=not headed))
+    click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
